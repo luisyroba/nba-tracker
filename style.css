@@ -126,4 +126,10 @@ main {
   .game-score {
     font-size: 24px;
   }
+
+  .live-extra {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #0a7a33;
 }
