@@ -6,7 +6,56 @@ body {
   padding: 0;
 }
 
-header {
+header {.teams-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.team-block {
+  flex: 1;
+  min-width: 180px;
+}
+
+.team-name {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.team-record {
+  color: #666;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.game-center {
+  text-align: center;
+  min-width: 180px;
+}
+
+.game-score {
+  font-size: 24px;
+  font-weight: bold;
+  color: #1d428a;
+}
+
+.game-status {
+  margin-top: 6px;
+  font-weight: bold;
+}
+
+.game-date {
+  margin-top: 4px;
+  font-size: 14px;
+  color: #666;
+}
+
+.analyze-btn {
+  margin-top: 14px;
+  width: 100%;
+}
   background: #1d428a;
   color: white;
   padding: 20px;
