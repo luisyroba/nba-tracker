@@ -373,4 +373,60 @@ main {
   color: #333;
   line-height: 1.4;
 }
+
+  .stats-table {
+  display: grid;
+  grid-template-columns: 1fr 160px 1fr;
+  border: 1px solid #e2e8f3;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.stats-head {
+  background: #1d428a;
+  color: #ffffff;
+  padding: 12px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.stat-middle {
+  text-align: center;
+}
+
+.team-left {
+  text-align: left;
+}
+
+.team-right {
+  text-align: right;
+}
+
+.stats-cell {
+  padding: 12px;
+  border-top: 1px solid #e8edf5;
+  font-size: 14px;
+  background: #fff;
+}
+
+.stats-cell:nth-child(3n+2) {
+  background: #f8faff;
+  font-weight: 700;
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .stats-table {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-head,
+  .stats-cell,
+  .team-left,
+  .team-right,
+  .stat-middle {
+    text-align: left;
+  }
+}
 }
