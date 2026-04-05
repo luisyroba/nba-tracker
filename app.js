@@ -149,65 +149,75 @@ async function analyzeGame(gameId) {
     };
 
     panel.innerHTML = `
-      <div class="pregame-compare">
-  <div class="pregame-row pregame-head">
-    <div>${awayName}</div>
-    <div>Métrica</div>
-    <div>${homeName}</div>
-  </div>
+  <div class="analysis-box pregame-shell">
+    <div class="analysis-header">
+      <h3>${awayName} vs ${homeName}</h3>
+      <p class="analysis-subtitle">Comparación pregame NBA</p>
+      <p class="analysis-date">${gameDate}</p>
+    </div>
 
-  <div class="pregame-row">
-    <div class="away">${awayStats.conference}</div>
-    <div class="metric">Conferencia</div>
-    <div class="home">${homeStats.conference}</div>
-  </div>
+    <div class="pregame-compare">
+      <div class="pregame-row pregame-head">
+        <div>${awayName}</div>
+        <div>Métrica</div>
+        <div>${homeName}</div>
+      </div>
 
-  <div class="pregame-row">
-    <div class="away">${awayStats.record}</div>
-    <div class="metric">Récord</div>
-    <div class="home">${homeStats.record}</div>
-  </div>
+      <div class="pregame-row">
+        <div class="away">${awayStats.conference}</div>
+        <div class="metric">Conferencia</div>
+        <div class="home">${homeStats.conference}</div>
+      </div>
 
-  <div class="pregame-row">
-    <div class="away">${awayStats.last10}</div>
-    <div class="metric">Últimos 10</div>
-    <div class="home">${homeStats.last10}</div>
-  </div>
+      <div class="pregame-row">
+        <div class="away">${awayStats.record}</div>
+        <div class="metric">Récord</div>
+        <div class="home">${homeStats.record}</div>
+      </div>
 
-  <div class="pregame-row">
-    <div class="away">${awayStats.streak}</div>
-    <div class="metric">Racha</div>
-    <div class="home">${homeStats.streak}</div>
-  </div>
+      <div class="pregame-row">
+        <div class="away">${awayStats.last10}</div>
+        <div class="metric">Últimos 10</div>
+        <div class="home">${homeStats.last10}</div>
+      </div>
 
-  <div class="pregame-row">
-    <div class="away">Pendiente</div>
-    <div class="metric">PPG</div>
-    <div class="home">Pendiente</div>
-  </div>
+      <div class="pregame-row">
+        <div class="away">${awayStats.streak}</div>
+        <div class="metric">Racha</div>
+        <div class="home">${homeStats.streak}</div>
+      </div>
 
-  <div class="pregame-row">
-    <div class="away">Pendiente</div>
-    <div class="metric">OPP PPG</div>
-    <div class="home">Pendiente</div>
-  </div>
+      <div class="pregame-row">
+        <div class="away">Pendiente</div>
+        <div class="metric">PPG</div>
+        <div class="home">Pendiente</div>
+      </div>
 
-  <div class="pregame-row">
-    <div class="away">Pendiente</div>
-    <div class="metric">Diferencial</div>
-    <div class="home">Pendiente</div>
-  </div>
+      <div class="pregame-row">
+        <div class="away">Pendiente</div>
+        <div class="metric">OPP PPG</div>
+        <div class="home">Pendiente</div>
+      </div>
 
-  <div class="pregame-row">
-    <div class="away">Pendiente</div>
-    <div class="metric">B2B</div>
-    <div class="home">Pendiente</div>
+      <div class="pregame-row">
+        <div class="away">Pendiente</div>
+        <div class="metric">Diferencial</div>
+        <div class="home">Pendiente</div>
+      </div>
+
+      <div class="pregame-row">
+        <div class="away">Pendiente</div>
+        <div class="metric">B2B</div>
+        <div class="home">Pendiente</div>
+      </div>
+    </div>
+
+    <div class="betting-notes">
+      <h4>Notas de apuesta</h4>
+      <p>Comparación base de forma reciente y posición general del matchup.</p>
+    </div>
   </div>
-</div>    `;
-  } catch (error) {
-    console.error("ERROR ANALYSIS:", error);
-    panel.innerHTML = "<p>No se pudo cargar el análisis pregame del partido.</p>";
-  }
+`;
 }
 
 loadNBAGames();
