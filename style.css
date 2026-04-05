@@ -374,59 +374,132 @@ main {
   line-height: 1.4;
 }
 
-  .stats-table {
+  .stats-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.stats-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.stats-row {
   display: grid;
-  grid-template-columns: 1fr 160px 1fr;
-  border: 1px solid #e2e8f3;
+  grid-template-columns: 1fr 150px 1fr;
+  align-items: stretch;
+  border: 1px solid #e3e8f2;
   border-radius: 14px;
   overflow: hidden;
   background: #ffffff;
 }
 
-.stats-head {
-  background: #1d428a;
-  color: #ffffff;
-  padding: 12px;
-  font-weight: 700;
-  font-size: 14px;
+.stats-header-row {
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
-.stat-middle {
-  text-align: center;
+.stats-head {
+  background: #1d428a;
+  color: #fff;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.stats-cell {
+  padding: 14px;
+  font-size: 14px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+}
+
+.team-value {
+  font-weight: 700;
+}
+
+.stat-name {
+  justify-content: center;
+  background: #f7f9fc;
+  font-weight: 700;
+  color: #1d2736;
 }
 
 .team-left {
+  justify-content: flex-start;
   text-align: left;
 }
 
 .team-right {
+  justify-content: flex-end;
   text-align: right;
 }
 
-.stats-cell {
-  padding: 12px;
-  border-top: 1px solid #e8edf5;
-  font-size: 14px;
-  background: #fff;
-}
-
-.stats-cell:nth-child(3n+2) {
-  background: #f8faff;
-  font-weight: 700;
+.stat-middle {
+  justify-content: center;
   text-align: center;
 }
 
-@media (max-width: 640px) {
-  .stats-table {
-    grid-template-columns: 1fr;
+@media (max-width: 768px) {
+  .stats-header-row {
+    display: none;
   }
 
-  .stats-head,
-  .stats-cell,
-  .team-left,
-  .team-right,
-  .stat-middle {
-    text-align: left;
+  .stats-row {
+    grid-template-columns: 1fr;
+    border-radius: 16px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
   }
+
+  .stats-cell {
+    min-height: auto;
+    padding: 10px 12px;
+  }
+
+  .stats-row .team-value:nth-child(1)::before {
+    content: "Visitante";
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .stats-row .stat-name::before {
+    content: "Métrica";
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .stats-row .team-value:nth-child(3)::before {
+    content: "Local";
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .stat-name,
+  .team-right,
+  .team-left {
+    text-align: left;
+    justify-content: flex-start;
+  }
+}
 }
 }
