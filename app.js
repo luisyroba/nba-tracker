@@ -5,18 +5,12 @@ async function loadNBAGames() {
   statusEl.textContent = "Cargando partidos NBA reales...";
   gamesContainer.innerHTML = "";
 
-  const url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
-
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
+    const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard");
     const data = await response.json();
     const events = data.events || [];
 
-    if (events.length === 0) {
+    if (!events.length) {
       statusEl.textContent = "No se encontraron partidos NBA";
       gamesContainer.innerHTML = "<p>No hay juegos disponibles.</p>";
       return;
@@ -24,23 +18,19 @@ async function loadNBAGames() {
 
     statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
 
-    events.forEach(event => {
-      const comp = event.competitions?.[0];
-      const competitors = comp?.competitors || [];
+    for (const event of events) {
+      const comp = event.competitions && event.competitions[0] ? event.competitions[0] : null;
+      const competitors = comp && comp.competitors ? comp.competitors : [];
 
       const home = competitors.find(t => t.homeAway === "home");
       const away = competitors.find(t => t.homeAway === "away");
 
-      const homeName = home?.team?.displayName || "Local";
-      const awayName = away?.team?.displayName || "Visitante";
-      const homeScore = home?.score ?? "-";
-      const awayScore = away?.score ?? "-";
-      const status = event.status?.type?.description || "Sin estado";
+      const homeName = home && home.team ? home.team.displayName : "Local";
+      const awayName = away && away.team ? away.team.displayName : "Visitante";
+      const homeScore = home && home.score ? home.score : "-";
+      const awayScore = away && away.score ? away.score : "-";
+      const status = event.status && event.status.type ? event.status.type.description : "Sin estado";
       const date = event.date ? new Date(event.date).toLocaleString("es-CL") : "Sin fecha";
-
-      const homeRecord = home?.records?.[0]?.summary || "Sin récord";
-      const awayRecord = away?.records?.[0]?.summary || "Sin récord";
-      const gameId = event.id || "";
 
       const div = document.createElement("div");
       div.className = "game";
@@ -48,34 +38,23 @@ async function loadNBAGames() {
         <div class="teams-row">
           <div class="team-block">
             <div class="team-name">${awayName}</div>
-            <div class="team-record">${awayRecord}</div>
           </div>
-
           <div class="game-center">
             <div class="game-score">${awayScore} - ${homeScore}</div>
             <div class="game-status">${status}</div>
             <div class="game-date">${date}</div>
           </div>
-
           <div class="team-block">
             <div class="team-name">${homeName}</div>
-            <div class="team-record">${homeRecord}</div>
           </div>
         </div>
-
-        <button class="analyze-btn" data-game-id="${gameId}">
-          Analizar partido
-        </button>
       `;
-
       gamesContainer.appendChild(div);
-    });
+    }
   } catch (error) {
-    console.error(error);
-    statusEl.textContent = "Error al cargar partidos NBA reales";
-    gamesContainer.innerHTML = `
-      <p>No se pudo cargar ESPN.</p>
-    `;
+    console.error("ERROR ESPN:", error);
+    statusEl.textContent = "Error al cargar ESPN";
+    gamesContainer.innerHTML = "<p>No se pudo cargar la API de ESPN.</p>";
   }
 }
 
