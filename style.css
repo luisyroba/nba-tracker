@@ -1,8 +1,55 @@
 body {
-  background: red !important;
+  font-family: Arial, sans-serif;
+  background: #f4f6fb;
+  color: #111;
+  margin: 0;
+  padding: 0;
 }
 
-header {.teams-row {
+header {
+  background: linear-gradient(135deg, #1d428a, #c8102e);
+  color: white;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+header h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+}
+
+header p {
+  margin: 0;
+  opacity: 0.9;
+}
+
+main {
+  max-width: 1000px;
+  margin: 24px auto;
+  padding: 0 16px;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+
+.game {
+  border: 1px solid #e3e7ef;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: #fbfcff;
+}
+
+.game:last-child {
+  margin-bottom: 0;
+}
+
+.teams-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -32,7 +79,7 @@ header {.teams-row {
 }
 
 .game-score {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: bold;
   color: #1d428a;
 }
@@ -40,6 +87,7 @@ header {.teams-row {
 .game-status {
   margin-top: 6px;
   font-weight: bold;
+  color: #c8102e;
 }
 
 .game-date {
@@ -51,71 +99,31 @@ header {.teams-row {
 .analyze-btn {
   margin-top: 14px;
   width: 100%;
-}
-  background: #1d428a;
-  color: white;
-  padding: 20px;
-  text-align: center;
-}
-
-main {
-  max-width: 900px;
-  margin: 20px auto;
-  padding: 0 16px;
-}
-
-.card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-}
-
-.game, .pick {
-  border-bottom: 1px solid #ddd;
-  padding: 12px 0;
-}
-
-.game:last-child, .pick:last-child {
-  border-bottom: none;
-}
-
-form {
-  display: grid;
-  gap: 10px;
-}
-
-input, button {
-  padding: 10px;
-  font-size: 16px;
-}
-
-button {
   background: #1d428a;
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 15px;
+  font-weight: bold;
   cursor: pointer;
 }
 
-button:hover {
+.analyze-btn:hover {
   background: #16346d;
 }
 
-#calc-result {
-  margin-top: 16px;
-  padding: 12px;
-  background: #eef4ff;
-  border-radius: 8px;
-}
+@media (max-width: 640px) {
+  .teams-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 
-.positive {
-  color: green;
-  font-weight: bold;
-}
+  .game-center {
+    text-align: left;
+  }
 
-.negative {
-  color: red;
-  font-weight: bold;
+  .game-score {
+    font-size: 24px;
+  }
 }
