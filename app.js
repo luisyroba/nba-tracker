@@ -1,6 +1,8 @@
 const statusEl = document.getElementById("status");
 const gamesContainer = document.getElementById("games");
 
+const API_KEY = "fb8439fd-edc1-4ac9-a8e6-50801a180f0c";
+
 async function loadNBAGames() {
   statusEl.textContent = "Cargando partidos NBA...";
   gamesContainer.innerHTML = "";
@@ -9,10 +11,14 @@ async function loadNBAGames() {
   const url = `https://api.balldontlie.io/nba/v1/games?dates[]=${today}`;
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        Authorization: API_KEY
+      }
+    });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(`Error HTTP ${response.status}`);
     }
 
     const data = await response.json();
@@ -35,13 +41,13 @@ async function loadNBAGames() {
       const homeScore = game.home_team_score ?? "-";
       const awayScore = game.visitor_team_score ?? "-";
       const status = game.status || "Sin estado";
-      const season = game.season || "N/A";
+      const date = game.date || "Sin fecha";
 
       div.innerHTML = `
         <strong>${away}</strong> vs <strong>${home}</strong><br>
+        Fecha: ${date}<br>
         Marcador: ${awayScore} - ${homeScore}<br>
-        Estado: ${status}<br>
-        Temporada: ${season}
+        Estado: ${status}
       `;
 
       gamesContainer.appendChild(div);
@@ -49,10 +55,9 @@ async function loadNBAGames() {
   } catch (error) {
     console.error(error);
     statusEl.textContent = "Error al cargar NBA";
-
     gamesContainer.innerHTML = `
-      <p>No se pudo cargar la API principal.</p>
-      <p>Prueba abrir en incógnito o revisa si BALLDONTLIE cambió acceso/cors.</p>
+      <p>No se pudo cargar la API.</p>
+      <p>Revisa si pegaste bien la API key en app.js.</p>
     `;
   }
 }
