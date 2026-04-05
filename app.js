@@ -102,52 +102,56 @@ async function analyzeGame(gameId) {
 
     const gameDate = comp && comp.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
 
-    const injuries = data.injuries || [];
-
-    const awayInjuries = injuries.filter(item =>
-      item.team && item.team.displayName && item.team.displayName.toLowerCase() === awayName.toLowerCase()
-    );
-
-    const homeInjuries = injuries.filter(item =>
-      item.team && item.team.displayName && item.team.displayName.toLowerCase() === homeName.toLowerCase()
-    );
-
-    const renderInjuries = (teamInjuries) => {
-      if (!teamInjuries.length) {
-        return "<li>Sin lesionados reportados en el feed.</li>";
-      }
-
-      return teamInjuries.map(player => {
-        const athlete = player.athlete && player.athlete.displayName ? player.athlete.displayName : "Jugador";
-        const status = player.status ? player.status : "Sin estatus";
-        const detail = player.detail ? ` - ${player.detail}` : "";
-        return `<li>${athlete} (${status})${detail}</li>`;
-      }).join("");
-    };
-
     panel.innerHTML = `
       <div class="analysis-box">
         <div class="analysis-header">
           <h3>${awayName} vs ${homeName}</h3>
-          <p class="analysis-subtitle">Panel pregame comparativo</p>
+          <p class="analysis-subtitle">Comparación pregame NBA</p>
           <p class="analysis-date">${gameDate}</p>
+        </div>
+
+        <div class="stats-table">
+          <div class="stats-head team-left">${awayName}</div>
+          <div class="stats-head stat-middle">Métrica</div>
+          <div class="stats-head team-right">${homeName}</div>
+
+          <div class="stats-cell">${awayRecord}</div>
+          <div class="stats-cell stat-name">Récord</div>
+          <div class="stats-cell">${homeRecord}</div>
+
+          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell stat-name">Últimos 10</div>
+          <div class="stats-cell">Pendiente</div>
+
+          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell stat-name">Racha</div>
+          <div class="stats-cell">Pendiente</div>
+
+          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell stat-name">PPG</div>
+          <div class="stats-cell">Pendiente</div>
+
+          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell stat-name">OPP PPG</div>
+          <div class="stats-cell">Pendiente</div>
+
+          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell stat-name">Diferencial</div>
+          <div class="stats-cell">Pendiente</div>
+
+          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell stat-name">B2B</div>
+          <div class="stats-cell">Pendiente</div>
         </div>
 
         <div class="analysis-grid">
           <div class="analysis-team">
             <h4>${awayName}</h4>
-            <p><strong>Récord:</strong> ${awayRecord}</p>
-            <p><strong>Últimos 10:</strong> Pendiente</p>
-            <p><strong>Racha:</strong> Pendiente</p>
-            <p><strong>PPG:</strong> Pendiente</p>
-            <p><strong>OPP PPG:</strong> Pendiente</p>
-            <p><strong>Diferencial:</strong> Pendiente</p>
-            <p><strong>B2B:</strong> Pendiente</p>
 
             <div class="info-block">
               <h5>Lesionados</h5>
               <ul class="info-list">
-                ${renderInjuries(awayInjuries)}
+                <li>No disponible en este feed del partido.</li>
               </ul>
             </div>
 
@@ -161,18 +165,11 @@ async function analyzeGame(gameId) {
 
           <div class="analysis-team">
             <h4>${homeName}</h4>
-            <p><strong>Récord:</strong> ${homeRecord}</p>
-            <p><strong>Últimos 10:</strong> Pendiente</p>
-            <p><strong>Racha:</strong> Pendiente</p>
-            <p><strong>PPG:</strong> Pendiente</p>
-            <p><strong>OPP PPG:</strong> Pendiente</p>
-            <p><strong>Diferencial:</strong> Pendiente</p>
-            <p><strong>B2B:</strong> Pendiente</p>
 
             <div class="info-block">
               <h5>Lesionados</h5>
               <ul class="info-list">
-                ${renderInjuries(homeInjuries)}
+                <li>No disponible en este feed del partido.</li>
               </ul>
             </div>
 
@@ -187,7 +184,7 @@ async function analyzeGame(gameId) {
 
         <div class="betting-notes">
           <h4>Notas de apuesta</h4>
-          <p>Aquí irán señales pregame como descanso, forma reciente, bajas clave, quinteto esperado y ventaja estadística del matchup.</p>
+          <p>Aquí irán lecturas pregame como ventaja estadística, descanso, forma reciente, rotación proyectada y contexto de bajas.</p>
         </div>
       </div>
     `;
