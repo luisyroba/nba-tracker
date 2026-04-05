@@ -7,10 +7,14 @@ async function loadNBAGames() {
 
   try {
     const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
     const data = await response.json();
     const events = data.events || [];
 
-    if (!events.length) {
+    if (events.length === 0) {
       statusEl.textContent = "No se encontraron partidos NBA";
       gamesContainer.innerHTML = "<p>No hay juegos disponibles.</p>";
       return;
@@ -58,6 +62,7 @@ async function loadNBAGames() {
           Analizar partido
         </button>
       `;
+
       gamesContainer.appendChild(div);
     }
   } catch (error) {
@@ -68,7 +73,3 @@ async function loadNBAGames() {
 }
 
 loadNBAGames();
-
-setInterval(() => {
-  loadNBAGames();
-}, 30000);
