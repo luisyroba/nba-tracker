@@ -118,10 +118,7 @@ async function analyzeGame(gameId) {
     function findTeamEntry(abbr, name) {
       return allEntries.find(entry => {
         const team = entry?.team || {};
-        return (
-          team.abbreviation === abbr ||
-          team.displayName === name
-        );
+        return team.abbreviation === abbr || team.displayName === name;
       });
     }
 
@@ -148,25 +145,29 @@ async function analyzeGame(gameId) {
       streak: getStatValue(homeEntry, "streak")
     };
 
-   panel.innerHTML = `
-  <div class="analysis-box">
-    <div class="analysis-header">
-      <h3>${awayName} vs ${homeName}</h3>
-      <p class="analysis-subtitle">Análisis pregame NBA</p>
-      <p class="analysis-date">${gameDate}</p>
-    </div>
+    panel.innerHTML = `
+      <div class="analysis-box">
+        <div class="analysis-header">
+          <h3>${awayName} vs ${homeName}</h3>
+          <p class="analysis-subtitle">Análisis pregame NBA</p>
+          <p class="analysis-date">${gameDate}</p>
+        </div>
 
-    <div class="betting-notes">
-      <h4>Notas</h4>
-      <p>Récord visitante: ${awayStats.record}</p>
-      <p>Récord local: ${homeStats.record}</p>
-      <p>Últimos 10 visitante: ${awayStats.last10}</p>
-      <p>Últimos 10 local: ${homeStats.last10}</p>
-      <p>Racha visitante: ${awayStats.streak}</p>
-      <p>Racha local: ${homeStats.streak}</p>
-    </div>
-  </div>
-`;
+        <div class="betting-notes">
+          <h4>Notas</h4>
+          <p>Récord visitante: ${awayStats.record}</p>
+          <p>Récord local: ${homeStats.record}</p>
+          <p>Últimos 10 visitante: ${awayStats.last10}</p>
+          <p>Últimos 10 local: ${homeStats.last10}</p>
+          <p>Racha visitante: ${awayStats.streak}</p>
+          <p>Racha local: ${homeStats.streak}</p>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error("ERROR ANALYSIS:", error);
+    panel.innerHTML = "<p>No se pudo cargar el análisis pregame del partido.</p>";
+  }
 }
 
 loadNBAGames();
