@@ -270,6 +270,100 @@ main {
   .analysis-grid {
     grid-template-columns: 1fr;
   }
+
+  .analysis-box {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
+
+.analysis-header h3 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  color: #1d428a;
+}
+
+.analysis-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.analysis-date {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: #444;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.analysis-team {
+  background: #f8faff;
+  border: 1px solid #e2e8f3;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.analysis-team h4 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: #c8102e;
+}
+
+.analysis-team p {
+  margin: 8px 0;
+  font-size: 15px;
+}
+
+.info-block {
+  margin-top: 16px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+}
+
+.info-block h5 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #1d428a;
+}
+
+.info-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.info-list li {
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #333;
+}
+
+.betting-notes {
+  background: #fff8e8;
+  border: 1px solid #f0d999;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.betting-notes h4 {
+  margin: 0 0 10px;
+  font-size: 18px;
+  color: #8a5a00;
+}
+
+.betting-notes p {
+  margin: 0;
+  font-size: 15px;
+}
+
+@media (max-width: 640px) {
+  .analysis-grid {
+    grid-template-columns: 1fr;
   }
 }
