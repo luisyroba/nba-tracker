@@ -374,132 +374,122 @@ main {
   line-height: 1.4;
 }
 
-  .stats-wrap {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.stats-table {
+.pregame-compare {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 18px;
 }
 
-.stats-row {
+.pregame-row {
   display: grid;
-  grid-template-columns: 1fr 150px 1fr;
-  align-items: stretch;
-  border: 1px solid #e3e8f2;
+  grid-template-columns: 1fr 140px 1fr;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
   overflow: hidden;
   background: #ffffff;
 }
 
-.stats-header-row {
-  border: none;
-  border-radius: 0;
-  background: transparent;
+.pregame-row > div {
+  padding: 14px 12px;
+  font-size: 14px;
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
 }
 
-.stats-head {
+.pregame-row .metric {
+  justify-content: center;
+  background: #f8fafc;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pregame-row .away {
+  justify-content: flex-start;
+  font-weight: 700;
+}
+
+.pregame-row .home {
+  justify-content: flex-end;
+  font-weight: 700;
+  text-align: right;
+}
+
+.pregame-head {
   background: #1d428a;
-  color: #fff;
-  padding: 12px 14px;
+  border: none;
+}
+
+.pregame-head > div {
+  color: #ffffff;
   font-size: 13px;
   font-weight: 700;
 }
 
-.stats-cell {
-  padding: 14px;
-  font-size: 14px;
-  background: #fff;
-  display: flex;
-  align-items: center;
-  min-height: 52px;
-}
-
-.team-value {
-  font-weight: 700;
-}
-
-.stat-name {
+.pregame-head > div:nth-child(2) {
   justify-content: center;
-  background: #f7f9fc;
-  font-weight: 700;
-  color: #1d2736;
 }
 
-.team-left {
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.team-right {
+.pregame-head > div:nth-child(3) {
   justify-content: flex-end;
-  text-align: right;
-}
-
-.stat-middle {
-  justify-content: center;
-  text-align: center;
 }
 
 @media (max-width: 768px) {
-  .stats-header-row {
+  .pregame-head {
     display: none;
   }
 
-  .stats-row {
+  .pregame-row {
     grid-template-columns: 1fr;
     border-radius: 16px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
   }
 
-  .stats-cell {
-    min-height: auto;
-    padding: 10px 12px;
+  .pregame-row .away,
+  .pregame-row .metric,
+  .pregame-row .home {
+    justify-content: flex-start;
+    text-align: left;
   }
 
-  .stats-row .team-value:nth-child(1)::before {
+  .pregame-row .away::before {
     content: "Visitante";
     display: block;
+    width: 100%;
     font-size: 11px;
     font-weight: 600;
-    color: #6b7280;
-    margin-bottom: 4px;
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.4px;
+    margin-bottom: 4px;
   }
 
-  .stats-row .stat-name::before {
+  .pregame-row .metric::before {
     content: "Métrica";
     display: block;
+    width: 100%;
     font-size: 11px;
     font-weight: 600;
-    color: #6b7280;
-    margin-bottom: 4px;
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.4px;
+    margin-bottom: 4px;
   }
 
-  .stats-row .team-value:nth-child(3)::before {
+  .pregame-row .home::before {
     content: "Local";
     display: block;
+    width: 100%;
     font-size: 11px;
     font-weight: 600;
-    color: #6b7280;
-    margin-bottom: 4px;
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.4px;
+    margin-bottom: 4px;
   }
 
-  .stat-name,
-  .team-right,
-  .team-left {
-    text-align: left;
-    justify-content: flex-start;
+  .pregame-row > div {
+    display: block;
+    padding: 12px;
   }
-}
-}
 }
