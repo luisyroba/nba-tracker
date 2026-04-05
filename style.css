@@ -26,9 +26,9 @@ header p {
 }
 
 main {
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 24px auto;
-  padding: 0 16px;
+  padding: 0 16px 32px;
 }
 
 .card {
@@ -39,68 +39,32 @@ main {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
-.game {
+#status {
+  margin: 0;
+  font-size: 15px;
+  color: #444;
+}
+
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.game-card {
   border: 1px solid #e3e7ef;
   border-radius: 14px;
   padding: 16px;
-  margin-bottom: 16px;
   background: #fbfcff;
-}
-
-.game:last-child {
-  margin-bottom: 0;
-}
-
-.teams-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: nowrap;
-}
-
-.team-block {
-  flex: 1;
-  min-width: 220px;
-}
-
-.team-block:first-child {
-  text-align: left;
-}
-
-.team-block:last-child {
-  text-align: right;
-}
-
-.team-name {
-  width: 100%;
-  font-size: 18px;
-  font-weight: 700;
-  color: #111;
-  line-height: 1.25;
-}
-
-.team-record {
-  margin-top: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #666;
-}
-
-.game-center {
-  min-width: 190px;
-  text-align: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 6px;
+  gap: 14px;
 }
 
-.game-score {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1d428a;
-  line-height: 1.1;
+.game-top {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .game-status {
@@ -109,29 +73,69 @@ main {
   color: #c8102e;
 }
 
+.game-date {
+  font-size: 13px;
+  color: #666;
+}
+
+.teams {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.team-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.team-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111;
+  line-height: 1.25;
+}
+
+.team-score {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1d428a;
+  line-height: 1;
+}
+
 .live-extra {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  align-self: flex-start;
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
   color: #ffffff;
   background: linear-gradient(135deg, #16a34a, #15803d);
   border-radius: 999px;
   box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
   line-height: 1;
   white-space: nowrap;
+  min-height: 30px;
 }
 
-.game-date {
-  font-size: 14px;
-  color: #666;
+.live-extra:empty {
+  display: none;
+}
+
+.game-actions {
+  margin-top: auto;
 }
 
 .analyze-btn {
-  margin-top: 14px;
   width: 100%;
   background: #1d428a;
   color: white;
@@ -148,11 +152,65 @@ main {
   background: #16346d;
 }
 
+.modal.hidden {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-panel {
+  position: relative;
+  z-index: 2;
+  width: min(860px, calc(100% - 24px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  margin: 16px auto;
+  background: white;
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 22px;
+  color: #1d428a;
+}
+
+#modal-close {
+  border: none;
+  background: #eef2f8;
+  color: #111;
+  border-radius: 10px;
+  width: 42px;
+  height: 42px;
+  font-size: 20px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .analysis-box {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  margin-top: 18px;
 }
 
 .analysis-header h3 {
@@ -173,86 +231,14 @@ main {
   color: #444;
 }
 
-.analysis-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.analysis-team {
-  background: #f8faff;
-  border: 1px solid #e2e8f3;
-  border-radius: 14px;
-  padding: 16px;
-}
-
-.analysis-team h4 {
-  margin: 0 0 12px;
-  font-size: 18px;
-  color: #c8102e;
-}
-
-.analysis-team p {
-  margin: 8px 0;
-  font-size: 15px;
-}
-
-.info-block {
-  margin-top: 16px;
-  padding: 14px;
-  background: #ffffff;
-  border: 1px solid #e8edf5;
-  border-radius: 12px;
-}
-
-.info-block h5 {
-  margin: 0 0 10px;
-  font-size: 15px;
-  color: #1d428a;
-}
-
-.info-list {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.info-list li {
-  margin-bottom: 6px;
-  font-size: 14px;
-  color: #333;
-  line-height: 1.4;
-}
-
-.betting-notes {
-  background: #fff8e8;
-  border: 1px solid #f0d999;
-  border-radius: 14px;
-  padding: 16px;
-}
-
-.betting-notes h4 {
-  margin: 0 0 10px;
-  font-size: 18px;
-  color: #8a5a00;
-}
-
-.betting-notes p {
-  margin: 0;
-  font-size: 15px;
-}
-
-.pregame-shell {
-  margin-top: 18px;
-}
-
-.pregame-shell .pregame-compare {
+.pregame-compare {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 18px;
+  margin-top: 8px;
 }
 
-.pregame-shell .pregame-row {
+.pregame-row {
   display: grid;
   grid-template-columns: 1fr 140px 1fr;
   border: 1px solid #e2e8f0;
@@ -261,7 +247,7 @@ main {
   background: #ffffff;
 }
 
-.pregame-shell .pregame-row > div {
+.pregame-row > div {
   padding: 14px 12px;
   font-size: 14px;
   line-height: 1.35;
@@ -269,66 +255,129 @@ main {
   align-items: center;
 }
 
-.pregame-shell .pregame-row .metric {
+.pregame-row > div:nth-child(2) {
   justify-content: center;
   background: #f8fafc;
   font-weight: 700;
   text-align: center;
 }
 
-.pregame-shell .pregame-row .away {
+.pregame-row > div:first-child {
   justify-content: flex-start;
   font-weight: 700;
   text-align: left;
 }
 
-.pregame-shell .pregame-row .home {
+.pregame-row > div:last-child {
   justify-content: flex-end;
   font-weight: 700;
   text-align: right;
 }
 
-.pregame-shell .pregame-head {
+.pregame-head {
   background: #1d428a;
   border: none;
 }
 
-.pregame-shell .pregame-head > div {
+.pregame-head > div {
   color: #ffffff;
   font-size: 13px;
   font-weight: 700;
 }
 
-.pregame-shell .pregame-head > div:nth-child(2) {
-  justify-content: center;
-}
-
-.pregame-shell .pregame-head > div:nth-child(3) {
-  justify-content: flex-end;
+.pregame-head > div:nth-child(2) {
+  background: transparent;
 }
 
 @media (max-width: 768px) {
-  .pregame-shell .pregame-head {
+  header {
+    padding: 20px 14px;
+  }
+
+  header h1 {
+    font-size: 26px;
+  }
+
+  header p {
+    font-size: 14px;
+  }
+
+  main {
+    margin: 16px auto;
+    padding: 0 12px 24px;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: 14px;
+    margin-bottom: 16px;
+  }
+
+  .games-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .game-card {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .team-row {
+    padding: 12px;
+  }
+
+  .team-name {
+    font-size: 15px;
+  }
+
+  .team-score {
+    font-size: 20px;
+  }
+
+  .game-status,
+  .game-date {
+    text-align: left;
+  }
+
+  .modal-panel {
+    width: calc(100% - 16px);
+    max-height: calc(100vh - 16px);
+    margin: 8px auto;
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .modal-header h2 {
+    font-size: 18px;
+  }
+
+  .analysis-header h3 {
+    font-size: 20px;
+  }
+
+  .pregame-head {
     display: none;
   }
 
-  .pregame-shell .pregame-row {
+  .pregame-row {
     grid-template-columns: 1fr;
     border-radius: 16px;
   }
 
-  .pregame-shell .pregame-row > div {
+  .pregame-row > div {
     display: block;
     padding: 12px;
+    text-align: left !important;
   }
 
-  .pregame-shell .pregame-row .away,
-  .pregame-shell .pregame-row .metric,
-  .pregame-shell .pregame-row .home {
-    text-align: left;
+  .pregame-row > div:nth-child(2),
+  .pregame-row > div:first-child,
+  .pregame-row > div:last-child {
+    justify-content: flex-start;
   }
 
-  .pregame-shell .pregame-row .away::before {
+  .pregame-row > div:first-child::before {
     content: "Visitante";
     display: block;
     font-size: 11px;
@@ -339,7 +388,7 @@ main {
     letter-spacing: 0.4px;
   }
 
-  .pregame-shell .pregame-row .metric::before {
+  .pregame-row > div:nth-child(2)::before {
     content: "Métrica";
     display: block;
     font-size: 11px;
@@ -348,9 +397,10 @@ main {
     margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 0.4px;
+    background: transparent;
   }
 
-  .pregame-shell .pregame-row .home::before {
+  .pregame-row > div:last-child::before {
     content: "Local";
     display: block;
     font-size: 11px;
@@ -359,35 +409,5 @@ main {
     margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 0.4px;
-  }
-
-  .analysis-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .teams-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .team-block,
-  .team-block:first-child,
-  .team-block:last-child {
-    min-width: 0;
-    text-align: left;
-  }
-
-  .game-center {
-    align-items: flex-start;
-    text-align: left;
-    min-width: 0;
-  }
-
-  .game-score {
-    font-size: 24px;
-  }
-
-  .live-extra {
-    align-self: flex-start;
   }
 }
