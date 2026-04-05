@@ -120,7 +120,20 @@ async function analyzeGame(gameId) {
             <p><strong>OPP PPG:</strong> Pendiente</p>
             <p><strong>Diferencial:</strong> Pendiente</p>
             <p><strong>B2B:</strong> Pendiente</p>
-            <p><strong>Lesiones:</strong> Pendiente</p>
+
+            <div class="info-block">
+              <h5>Lesionados</h5>
+              <ul class="info-list">
+                <li>Pendiente</li>
+              </ul>
+            </div>
+
+            <div class="info-block">
+              <h5>Possible lineup</h5>
+              <ul class="info-list">
+                <li>Pendiente</li>
+              </ul>
+            </div>
           </div>
 
           <div class="analysis-team">
@@ -132,13 +145,26 @@ async function analyzeGame(gameId) {
             <p><strong>OPP PPG:</strong> Pendiente</p>
             <p><strong>Diferencial:</strong> Pendiente</p>
             <p><strong>B2B:</strong> Pendiente</p>
-            <p><strong>Lesiones:</strong> Pendiente</p>
+
+            <div class="info-block">
+              <h5>Lesionados</h5>
+              <ul class="info-list">
+                <li>Pendiente</li>
+              </ul>
+            </div>
+
+            <div class="info-block">
+              <h5>Possible lineup</h5>
+              <ul class="info-list">
+                <li>Pendiente</li>
+              </ul>
+            </div>
           </div>
         </div>
 
         <div class="betting-notes">
           <h4>Notas de apuesta</h4>
-          <p>Aquí irán señales pregame como ventaja de descanso, forma reciente, diferencia ofensiva/defensiva y contexto de bajas.</p>
+          <p>Aquí irán señales pregame como descanso, forma reciente, bajas clave, quinteto esperado y ventaja estadística del matchup.</p>
         </div>
       </div>
     `;
