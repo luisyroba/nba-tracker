@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NBA Betting Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>NBA Betting Dashboard</h1>
+    <p>Partidos del día, cuotas y análisis básico</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Estado</h2>
+      <p id="status">Cargando app...</p>
+    </section>
+
+    <section class="card">
+      <h2>Partidos NBA</h2>
+      <div id="games">Aquí aparecerán los partidos.</div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
