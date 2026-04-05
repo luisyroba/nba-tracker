@@ -1,12 +1,22 @@
 const statusEl = document.getElementById("status");
 const gamesContainer = document.getElementById("games");
+const analysisPanel = document.getElementById("analysis-panel");
+
+const modal = document.getElementById("game-modal");
+const modalCloseBtn = document.getElementById("modal-close");
+const modalCloseBg = document.getElementById("modal-close-bg");
 
 async function loadNBAGames() {
+  if (!statusEl || !gamesContainer) return;
+
   statusEl.textContent = "Cargando partidos NBA reales...";
   gamesContainer.innerHTML = "";
 
   try {
-    const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard");
+    const response = await fetch(
+      "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+    );
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -23,44 +33,51 @@ async function loadNBAGames() {
     statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
 
     for (const event of events) {
-      const comp = event.competitions && event.competitions[0] ? event.competitions[0] : null;
-      const competitors = comp && comp.competitors ? comp.competitors : [];
+      const comp = event.competitions?.[0] || null;
+      const competitors = comp?.competitors || [];
 
       const home = competitors.find(t => t.homeAway === "home");
       const away = competitors.find(t => t.homeAway === "away");
 
-      const homeName = home && home.team ? home.team.displayName : "Local";
-      const awayName = away && away.team ? away.team.displayName : "Visitante";
-      const homeScore = home && home.score ? home.score : "-";
-      const awayScore = away && away.score ? away.score : "-";
-      const status = event.status && event.status.type ? event.status.type.description : "Sin estado";
-      const date = event.date ? new Date(event.date).toLocaleString("es-CL") : "Sin fecha";
-      const period = event.status && event.status.period ? event.status.period : null;
-      const clock = event.status && event.status.displayClock ? event.status.displayClock : "";
+      const homeName = home?.team?.displayName || "Local";
+      const awayName = away?.team?.displayName || "Visitante";
+      const homeScore = home?.score ?? "-";
+      const awayScore = away?.score ?? "-";
+      const gameStatus = event.status?.type?.description || "Sin estado";
+      const date = event.date
+        ? new Date(event.date).toLocaleString("es-CL")
+        : "Sin fecha";
+      const period = event.status?.period || null;
+      const clock = event.status?.displayClock || "";
 
-      const div = document.createElement("div");
-      div.className = "game";
+      const div = document.createElement("article");
+      div.className = "game-card";
+
       div.innerHTML = `
-        <div class="teams-row">
-          <div class="team-block">
-            <div class="team-name">${awayName}</div>
+        <div class="game-top">
+          <span class="game-status">${gameStatus}</span>
+          <span class="game-date">${date}</span>
+        </div>
+
+        <div class="teams">
+          <div class="team-row">
+            <span class="team-name">${awayName}</span>
+            <strong class="team-score">${awayScore}</strong>
           </div>
 
-          <div class="game-center">
-            <div class="game-score">${awayScore} - ${homeScore}</div>
-            <div class="game-status">${status}</div>
-            <div class="live-extra">${period ? `LIVE · Q${period} · ${clock}` : ""}</div>
-            <div class="game-date">${date}</div>
-          </div>
-
-          <div class="team-block">
-            <div class="team-name">${homeName}</div>
+          <div class="team-row">
+            <span class="team-name">${homeName}</span>
+            <strong class="team-score">${homeScore}</strong>
           </div>
         </div>
 
-        <button class="analyze-btn" data-game-id="${event.id}">
-          Analizar partido
-        </button>
+        <div class="live-extra">${period ? `LIVE · Q${period} · ${clock}` : ""}</div>
+
+        <div class="game-actions">
+          <button class="analyze-btn" data-game-id="${event.id}">
+            Analizar partido
+          </button>
+        </div>
       `;
 
       gamesContainer.appendChild(div);
@@ -73,10 +90,10 @@ async function loadNBAGames() {
 }
 
 async function analyzeGame(gameId) {
-  const panel = document.getElementById("analysis-panel");
-  if (!panel) return;
+  if (!analysisPanel) return;
 
-  panel.innerHTML = "<p>Cargando análisis pregame...</p>";
+  openModal();
+  analysisPanel.innerHTML = "<p>Cargando análisis pregame...</p>";
 
   try {
     const [summaryRes, standingsRes] = await Promise.all([
@@ -145,7 +162,7 @@ async function analyzeGame(gameId) {
       streak: getStatValue(homeEntry, "streak")
     };
 
-    panel.innerHTML = `
+    analysisPanel.innerHTML = `
       <div class="analysis-box">
         <div class="analysis-header">
           <h3>${awayName} vs ${homeName}</h3>
@@ -153,24 +170,56 @@ async function analyzeGame(gameId) {
           <p class="analysis-date">${gameDate}</p>
         </div>
 
-        <div class="betting-notes">
-          <h4>Notas</h4>
-          <p>Récord visitante: ${awayStats.record}</p>
-          <p>Récord local: ${homeStats.record}</p>
-          <p>Últimos 10 visitante: ${awayStats.last10}</p>
-          <p>Últimos 10 local: ${homeStats.last10}</p>
-          <p>Racha visitante: ${awayStats.streak}</p>
-          <p>Racha local: ${homeStats.streak}</p>
+        <div class="pregame-compare">
+          <div class="pregame-row pregame-head">
+            <div>${awayName}</div>
+            <div>Métrica</div>
+            <div>${homeName}</div>
+          </div>
+
+          <div class="pregame-row">
+            <div>${awayStats.conference}</div>
+            <div>Conferencia</div>
+            <div>${homeStats.conference}</div>
+          </div>
+
+          <div class="pregame-row">
+            <div>${awayStats.record}</div>
+            <div>Récord</div>
+            <div>${homeStats.record}</div>
+          </div>
+
+          <div class="pregame-row">
+            <div>${awayStats.last10}</div>
+            <div>Últimos 10</div>
+            <div>${homeStats.last10}</div>
+          </div>
+
+          <div class="pregame-row">
+            <div>${awayStats.streak}</div>
+            <div>Racha</div>
+            <div>${homeStats.streak}</div>
+          </div>
         </div>
       </div>
     `;
   } catch (error) {
     console.error("ERROR ANALYSIS:", error);
-    panel.innerHTML = "<p>No se pudo cargar el análisis pregame del partido.</p>";
+    analysisPanel.innerHTML = "<p>No se pudo cargar el análisis pregame del partido.</p>";
   }
 }
 
-loadNBAGames();
+function openModal() {
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeModal() {
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+}
 
 gamesContainer.addEventListener("click", (e) => {
   const btn = e.target.closest(".analyze-btn");
@@ -182,6 +231,13 @@ gamesContainer.addEventListener("click", (e) => {
   analyzeGame(gameId);
 });
 
-setInterval(() => {
-  loadNBAGames();
-}, 30000);
+modalCloseBtn?.addEventListener("click", closeModal);
+modalCloseBg?.addEventListener("click", closeModal);
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    closeModal();
+  }
+});
+
+loadNBAGames();
