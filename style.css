@@ -54,23 +54,20 @@ main {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .team-block {
   flex: 1;
-  min-width: 180px;
+  min-width: 220px;
 }
 
-.team-name {
-  font-size: 18px;
-  font-weight: bold;
+.team-block:first-child {
+  text-align: left;
 }
 
-.team-record {
-  color: #666;
-  font-size: 14px;
-  margin-top: 4px;
+.team-block:last-child {
+  text-align: right;
 }
 
 .game-center {
