@@ -492,4 +492,8 @@ main {
     display: block;
     padding: 12px;
   }
+
+  .pregame-row {
+  outline: 3px solid red !important;
+}
 }
