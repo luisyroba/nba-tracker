@@ -31,6 +31,8 @@ async function loadNBAGames() {
       const awayScore = away && away.score ? away.score : "-";
       const status = event.status && event.status.type ? event.status.type.description : "Sin estado";
       const date = event.date ? new Date(event.date).toLocaleString("es-CL") : "Sin fecha";
+      const period = event.status && event.status.period ? event.status.period : null;
+      const clock = event.status && event.status.displayClock ? event.status.displayClock : "";
 
       const div = document.createElement("div");
       div.className = "game";
@@ -41,8 +43,9 @@ async function loadNBAGames() {
           </div>
           <div class="game-center">
             <div class="game-score">${awayScore} - ${homeScore}</div>
-            <div class="game-status">${status}</div>
-            <div class="game-date">${date}</div>
+           <div class="game-status">${status}</div>
+           <div class="live-extra">${period ? `Q${period} · ${clock}` : ""}</div>
+           <div class="game-date">${date}</div>
           </div>
           <div class="team-block">
             <div class="team-name">${homeName}</div>
