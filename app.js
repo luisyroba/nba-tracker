@@ -1,100 +1,62 @@
 const statusEl = document.getElementById("status");
 const gamesContainer = document.getElementById("games");
-const form = document.getElementById("bet-form");
-const resultEl = document.getElementById("calc-result");
-const picksList = document.getElementById("picks-list");
 
-const sampleGames = [
-  { away: "Boston Celtics", home: "Milwaukee Bucks", status: "Próximo partido" },
-  { away: "Denver Nuggets", home: "Phoenix Suns", status: "Próximo partido" },
-  { away: "Los Angeles Lakers", home: "Golden State Warriors", status: "Próximo partido" }
-];
-
-function loadLocalGames() {
-  statusEl.textContent = "Modo local activo: dashboard NBA listo";
+async function loadNBAGames() {
+  statusEl.textContent = "Cargando partidos NBA reales...";
   gamesContainer.innerHTML = "";
 
-  sampleGames.forEach(game => {
-    const div = document.createElement("div");
-    div.className = "game";
-    div.innerHTML = `
-      <strong>${game.away}</strong> vs <strong>${game.home}</strong><br>
-      Estado: ${game.status}
+  const url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard";
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const events = data.events || [];
+
+    if (events.length === 0) {
+      statusEl.textContent = "No se encontraron partidos NBA";
+      gamesContainer.innerHTML = "<p>No hay juegos disponibles.</p>";
+      return;
+    }
+
+    statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
+
+    events.forEach(event => {
+      const comp = event.competitions?.[0];
+      const competitors = comp?.competitors || [];
+
+      const home = competitors.find(t => t.homeAway === "home");
+      const away = competitors.find(t => t.homeAway === "away");
+
+      const homeName = home?.team?.displayName || "Local";
+      const awayName = away?.team?.displayName || "Visitante";
+      const homeScore = home?.score ?? "-";
+      const awayScore = away?.score ?? "-";
+      const status = event.status?.type?.description || "Sin estado";
+      const date = event.date ? new Date(event.date).toLocaleString("es-CL") : "Sin fecha";
+
+      const div = document.createElement("div");
+      div.className = "game";
+      div.innerHTML = `
+        <strong>${awayName}</strong> vs <strong>${homeName}</strong><br>
+        Fecha: ${date}<br>
+        Marcador: ${awayScore} - ${homeScore}<br>
+        Estado: ${status}
+      `;
+
+      gamesContainer.appendChild(div);
+    });
+  } catch (error) {
+    console.error(error);
+    statusEl.textContent = "Error al cargar partidos NBA reales";
+    gamesContainer.innerHTML = `
+      <p>No se pudo cargar ESPN.</p>
+      <p>Si falla, el siguiente paso será usar un proxy gratuito o una carga desde JSON propio actualizado.</p>
     `;
-    gamesContainer.appendChild(div);
-  });
-}
-
-function getPicks() {
-  return JSON.parse(localStorage.getItem("nba_picks") || "[]");
-}
-
-function savePicks(picks) {
-  localStorage.setItem("nba_picks", JSON.stringify(picks));
-}
-
-function renderPicks() {
-  const picks = getPicks();
-  picksList.innerHTML = "";
-
-  if (picks.length === 0) {
-    picksList.innerHTML = "<p>Aún no has guardado picks.</p>";
-    return;
   }
-
-  picks.forEach((pick, index) => {
-    const div = document.createElement("div");
-    div.className = "pick";
-
-    const evClass = pick.ev >= 0 ? "positive" : "negative";
-
-    div.innerHTML = `
-      <strong>${pick.match}</strong><br>
-      Mercado: ${pick.market}<br>
-      Cuota: ${pick.odds}<br>
-      Prob. implícita: ${pick.impliedProb}%<br>
-      Tu prob.: ${pick.userProb}%<br>
-      EV: <span class="${evClass}">${pick.ev}%</span><br>
-      Stake: ${pick.stake}
-    `;
-
-    picksList.appendChild(div);
-  });
 }
 
-form.addEventListener("submit", (e) => {
-  e.preventDefault();
-
-  const match = document.getElementById("match").value.trim();
-  const market = document.getElementById("market").value.trim();
-  const odds = parseFloat(document.getElementById("odds").value);
-  const userProb = parseFloat(document.getElementById("prob").value);
-  const stake = parseFloat(document.getElementById("stake").value);
-
-  const impliedProb = ((1 / odds) * 100).toFixed(2);
-  const ev = ((odds * (userProb / 100)) - 1) * 100;
-  const evRounded = ev.toFixed(2);
-
-  resultEl.innerHTML = `
-    <p>Probabilidad implícita: <strong>${impliedProb}%</strong></p>
-    <p>EV estimado: <strong class="${ev >= 0 ? 'positive' : 'negative'}">${evRounded}%</strong></p>
-  `;
-
-  const picks = getPicks();
-  picks.unshift({
-    match,
-    market,
-    odds,
-    userProb,
-    impliedProb,
-    ev: evRounded,
-    stake
-  });
-
-  savePicks(picks);
-  renderPicks();
-  form.reset();
-});
-
-loadLocalGames();
-renderPicks();
+loadNBAGames();
