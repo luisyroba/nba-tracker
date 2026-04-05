@@ -38,13 +38,34 @@ async function loadNBAGames() {
       const status = event.status?.type?.description || "Sin estado";
       const date = event.date ? new Date(event.date).toLocaleString("es-CL") : "Sin fecha";
 
+           const homeRecord = home?.records?.[0]?.summary || "Sin récord";
+      const awayRecord = away?.records?.[0]?.summary || "Sin récord";
+      const gameId = event.id || "";
+
       const div = document.createElement("div");
       div.className = "game";
       div.innerHTML = `
-        <strong>${awayName}</strong> vs <strong>${homeName}</strong><br>
-        Fecha: ${date}<br>
-        Marcador: ${awayScore} - ${homeScore}<br>
-        Estado: ${status}
+        <div class="teams-row">
+          <div class="team-block">
+            <div class="team-name">${awayName}</div>
+            <div class="team-record">${awayRecord}</div>
+          </div>
+
+          <div class="game-center">
+            <div class="game-score">${awayScore} - ${homeScore}</div>
+            <div class="game-status">${status}</div>
+            <div class="game-date">${date}</div>
+          </div>
+
+          <div class="team-block">
+            <div class="team-name">${homeName}</div>
+            <div class="team-record">${homeRecord}</div>
+          </div>
+        </div>
+
+        <button class="analyze-btn" data-game-id="${gameId}">
+          Analizar partido
+        </button>
       `;
 
       gamesContainer.appendChild(div);
