@@ -366,4 +366,11 @@ main {
   .analysis-grid {
     grid-template-columns: 1fr;
   }
+
+  .info-list li {
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.4;
+}
 }
