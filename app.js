@@ -25,30 +25,28 @@ async function loadNBAGames() {
     statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
 
     events.forEach(event => {
-            const homeRecord = home?.records?.[0]?.summary || "Sin récord";
-      const awayRecord = away?.records?.[0]?.summary || "Sin récord";
+      const comp = event.competitions?.[0];
+      const competitors = comp?.competitors || [];
+
+      const home = competitors.find(t => t.homeAway === "home");
+      const away = competitors.find(t => t.homeAway === "away");
+
+      const homeName = home?.team?.displayName || "Local";
+      const awayName = away?.team?.displayName || "Visitante";
+      const homeScore = home?.score ?? "-";
+      const awayScore = away?.score ?? "-";
+      const status = event.status?.type?.description || "Sin estado";
+      const date = event.date ? new Date(event.date).toLocaleString("es-CL") : "Sin fecha";
 
       const div = document.createElement("div");
       div.className = "game";
       div.innerHTML = `
-        <div class="teams-row">
-          <div class="team-block">
-            <div class="team-name">${awayName}</div>
-            <div class="team-record">${awayRecord}</div>
-          </div>
-          <div class="game-center">
-            <div class="game-score">${awayScore} - ${homeScore}</div>
-            <div class="game-status">${status}</div>
-            <div class="game-date">${date}</div>
-          </div>
-          <div class="team-block">
-            <div class="team-name">${homeName}</div>
-            <div class="team-record">${homeRecord}</div>
-          </div>
-        </div>
-        <button class="analyze-btn">Analizar partido</button>
+        <strong>${awayName}</strong> vs <strong>${homeName}</strong><br>
+        Fecha: ${date}<br>
+        Marcador: ${awayScore} - ${homeScore}<br>
+        Estado: ${status}
       `;
-      
+
       gamesContainer.appendChild(div);
     });
   } catch (error) {
