@@ -79,28 +79,74 @@ async function analyzeGame(gameId) {
   panel.innerHTML = "<p>Cargando análisis pregame...</p>";
 
   try {
-    const response = await fetch(`https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    const [summaryRes, standingsRes] = await Promise.all([
+      fetch(`https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`),
+      fetch("https://site.web.api.espn.com/apis/v2/sports/basketball/nba/standings")
+    ]);
+
+    if (!summaryRes.ok) throw new Error(`Summary HTTP ${summaryRes.status}`);
+    if (!standingsRes.ok) throw new Error(`Standings HTTP ${standingsRes.status}`);
+
+    const summaryData = await summaryRes.json();
+    const standingsData = await standingsRes.json();
+
+    const comp = summaryData?.header?.competitions?.[0] || {};
+    const competitors = comp?.competitors || [];
+
+    const home = competitors.find(team => team.homeAway === "home");
+    const away = competitors.find(team => team.homeAway === "away");
+
+    const homeName = home?.team?.displayName || "Local";
+    const awayName = away?.team?.displayName || "Visitante";
+    const homeAbbr = home?.team?.abbreviation || "";
+    const awayAbbr = away?.team?.abbreviation || "";
+
+    const gameDate = comp?.date
+      ? new Date(comp.date).toLocaleString("es-CL")
+      : "Pendiente";
+
+    const conferenceGroups = standingsData?.children || [];
+
+    const allEntries = conferenceGroups.flatMap(group => {
+      const entries = group?.standings?.entries || [];
+      return entries.map(entry => ({
+        ...entry,
+        conference: group?.name || "NBA"
+      }));
+    });
+
+    function findTeamEntry(abbr, name) {
+      return allEntries.find(entry => {
+        const team = entry?.team || {};
+        return (
+          team.abbreviation === abbr ||
+          team.displayName === name
+        );
+      });
     }
 
-    const data = await response.json();
+    function getStatValue(entry, statName) {
+      if (!entry?.stats) return "Pendiente";
+      const stat = entry.stats.find(s => s.name === statName);
+      return stat?.displayValue || stat?.value || "Pendiente";
+    }
 
-    const header = data.header || {};
-    const competitions = header.competitions || [];
-    const comp = competitions[0] || {};
-    const competitors = comp.competitors || [];
+    const awayEntry = findTeamEntry(awayAbbr, awayName);
+    const homeEntry = findTeamEntry(homeAbbr, homeName);
 
-    const home = competitors.find(t => t.homeAway === "home");
-    const away = competitors.find(t => t.homeAway === "away");
+    const awayStats = {
+      conference: awayEntry?.conference || "Pendiente",
+      record: getStatValue(awayEntry, "overall"),
+      last10: getStatValue(awayEntry, "lastTen"),
+      streak: getStatValue(awayEntry, "streak")
+    };
 
-    const homeName = home && home.team ? home.team.displayName : "Local";
-    const awayName = away && away.team ? away.team.displayName : "Visitante";
-
-    const homeRecord = home && home.records && home.records[0] ? home.records[0].summary : "Pendiente";
-    const awayRecord = away && away.records && away.records[0] ? away.records[0].summary : "Pendiente";
-
-    const gameDate = comp && comp.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
+    const homeStats = {
+      conference: homeEntry?.conference || "Pendiente",
+      record: getStatValue(homeEntry, "overall"),
+      last10: getStatValue(homeEntry, "lastTen"),
+      streak: getStatValue(homeEntry, "streak")
+    };
 
     panel.innerHTML = `
       <div class="analysis-box">
@@ -115,17 +161,21 @@ async function analyzeGame(gameId) {
           <div class="stats-head stat-middle">Métrica</div>
           <div class="stats-head team-right">${homeName}</div>
 
-          <div class="stats-cell">${awayRecord}</div>
+          <div class="stats-cell">${awayStats.conference}</div>
+          <div class="stats-cell stat-name">Conferencia</div>
+          <div class="stats-cell">${homeStats.conference}</div>
+
+          <div class="stats-cell">${awayStats.record}</div>
           <div class="stats-cell stat-name">Récord</div>
-          <div class="stats-cell">${homeRecord}</div>
+          <div class="stats-cell">${homeStats.record}</div>
 
-          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell">${awayStats.last10}</div>
           <div class="stats-cell stat-name">Últimos 10</div>
-          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell">${homeStats.last10}</div>
 
-          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell">${awayStats.streak}</div>
           <div class="stats-cell stat-name">Racha</div>
-          <div class="stats-cell">Pendiente</div>
+          <div class="stats-cell">${homeStats.streak}</div>
 
           <div class="stats-cell">Pendiente</div>
           <div class="stats-cell stat-name">PPG</div>
@@ -184,7 +234,7 @@ async function analyzeGame(gameId) {
 
         <div class="betting-notes">
           <h4>Notas de apuesta</h4>
-          <p>Aquí irán lecturas pregame como ventaja estadística, descanso, forma reciente, rotación proyectada y contexto de bajas.</p>
+          <p>El panel ya compara forma básica por equipo con standings oficiales: conferencia, récord, últimos 10 y racha.</p>
         </div>
       </div>
     `;
