@@ -1,19 +1,48 @@
-document.getElementById("status").textContent = "App cargada correctamente";
-
-const sampleGames = [
-  { home: "Boston Celtics", away: "Milwaukee Bucks", time: "19:30" },
-  { home: "Denver Nuggets", away: "Phoenix Suns", time: "21:00" },
-  { home: "Lakers", away: "Warriors", time: "22:30" }
-];
-
+const statusEl = document.getElementById("status");
 const gamesContainer = document.getElementById("games");
 
-sampleGames.forEach(game => {
-  const div = document.createElement("div");
-  div.className = "game";
-  div.innerHTML = `
-    <strong>${game.away}</strong> vs <strong>${game.home}</strong><br>
-    Hora: ${game.time}
-  `;
-  gamesContainer.appendChild(div);
-});
+async function loadNBAGames() {
+  statusEl.textContent = "Cargando partidos NBA...";
+  gamesContainer.innerHTML = "";
+
+  const url = "https://www.thesportsdb.com/api/v1/json/3/eventsnextleague.php?id=4387";
+
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (!data.events || data.events.length === 0) {
+      statusEl.textContent = "No se encontraron partidos.";
+      gamesContainer.innerHTML = "<p>No hay partidos disponibles.</p>";
+      return;
+    }
+
+    statusEl.textContent = "Partidos NBA cargados";
+
+    data.events.forEach(game => {
+      const div = document.createElement("div");
+      div.className = "game";
+
+      const date = game.dateEvent || "Sin fecha";
+      const time = game.strTime || "Sin hora";
+      const home = game.strHomeTeam || "Local";
+      const away = game.strAwayTeam || "Visitante";
+      const venue = game.strVenue || "Sin estadio";
+
+      div.innerHTML = `
+        <strong>${away}</strong> vs <strong>${home}</strong><br>
+        Fecha: ${date}<br>
+        Hora: ${time}<br>
+        Estadio: ${venue}
+      `;
+
+      gamesContainer.appendChild(div);
+    });
+  } catch (error) {
+    console.error(error);
+    statusEl.textContent = "Error al cargar los partidos NBA";
+    gamesContainer.innerHTML = "<p>No se pudo obtener la información.</p>";
+  }
+}
+
+loadNBAGames();
