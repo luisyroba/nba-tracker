@@ -6,6 +6,18 @@ const modal = document.getElementById("game-modal");
 const modalCloseBtn = document.getElementById("modal-close");
 const modalCloseBg = document.getElementById("modal-close-bg");
 
+function openModal() {
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeModal() {
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+}
+
 async function loadNBAGames() {
   if (!statusEl || !gamesContainer) return;
 
@@ -13,9 +25,7 @@ async function loadNBAGames() {
   gamesContainer.innerHTML = "";
 
   try {
-    const response = await fetch(
-      "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
-    );
+    const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard");
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
@@ -90,10 +100,10 @@ async function loadNBAGames() {
 }
 
 async function analyzeGame(gameId) {
-  const panel = document.getElementById("analysis-panel");
-  if (!panel) return;
+  if (!analysisPanel) return;
 
-  panel.innerHTML = "<p>Cargando análisis pregame...</p>";
+  openModal();
+  analysisPanel.innerHTML = "<p>Cargando análisis pregame...</p>";
 
   try {
     const [summaryRes, standingsRes] = await Promise.all([
@@ -225,14 +235,14 @@ async function analyzeGame(gameId) {
     if (homeEdge > awayEdge) edgeText = `Ligera ventaja ${homeName}`;
 
     let autoNote = "Sin señal fuerte todavía; conviene revisar mercado y contexto final.";
-    if (awayEdge >= 2 && awayLast10Parsed && homeLast10Parsed) {
+    if (awayEdge >= 2) {
       autoNote = `${awayName} llega con mejor perfil reciente en esta comparación básica.`;
     }
-    if (homeEdge >= 2 && awayLast10Parsed && homeLast10Parsed) {
+    if (homeEdge >= 2) {
       autoNote = `${homeName} llega con mejor perfil reciente en esta comparación básica.`;
     }
 
-    panel.innerHTML = `
+    analysisPanel.innerHTML = `
       <div class="analysis-box">
         <div class="analysis-header">
           <h3>${awayName} vs ${homeName}</h3>
@@ -253,50 +263,38 @@ async function analyzeGame(gameId) {
           </div>
 
           <div class="pregame-row">
-            <div class="away">${awayStats.conference}</div>
-            <div class="metric">Conferencia</div>
-            <div class="home">${homeStats.conference}</div>
+            <div>${awayStats.conference}</div>
+            <div>Conferencia</div>
+            <div>${homeStats.conference}</div>
           </div>
 
           <div class="pregame-row">
-            <div class="away">${awayStats.record} · ${awayStats.position}º</div>
-            <div class="metric">Récord · Conf</div>
-            <div class="home">${homeStats.record} · ${homeStats.position}º</div>
+            <div>${awayStats.record} · ${awayStats.position}º</div>
+            <div>Récord / Posición</div>
+            <div>${homeStats.record} · ${homeStats.position}º</div>
           </div>
 
           <div class="pregame-row">
-            <div class="away">${awayStats.last10}</div>
-            <div class="metric">Últimos 10</div>
-            <div class="home">${homeStats.last10}</div>
+            <div>${awayStats.last10}</div>
+            <div>Últimos 10</div>
+            <div>${homeStats.last10}</div>
           </div>
 
           <div class="pregame-row">
-            <div class="away">${awayStats.streak}</div>
-            <div class="metric">Racha</div>
-            <div class="home">${homeStats.streak}</div>
+            <div>${awayStats.streak}</div>
+            <div>Racha</div>
+            <div>${homeStats.streak}</div>
           </div>
         </div>
       </div>
     `;
   } catch (error) {
     console.error("ERROR ANALYSIS:", error);
-    panel.innerHTML = "<p>No se pudo cargar el análisis pregame del partido.</p>";
+    analysisPanel.innerHTML = "<p>No se pudo cargar el análisis pregame del partido.</p>";
   }
 }
 
-function openModal() {
-  if (!modal) return;
-  modal.classList.remove("hidden");
-  modal.setAttribute("aria-hidden", "false");
-}
-
-function closeModal() {
-  if (!modal) return;
-  modal.classList.add("hidden");
-  modal.setAttribute("aria-hidden", "true");
-}
-
-gamesContainer.addEventListener("click", (e) => {
+gamesContainer?.addEventListener("click", (e) => {
   const btn = e.target.closest(".analyze-btn");
   if (!btn) return;
 
