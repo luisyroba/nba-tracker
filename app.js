@@ -148,73 +148,22 @@ async function analyzeGame(gameId) {
       streak: getStatValue(homeEntry, "streak")
     };
 
-    panel.innerHTML = `
-  <div class="analysis-box pregame-shell">
+   panel.innerHTML = `
+  <div class="analysis-box">
     <div class="analysis-header">
       <h3>${awayName} vs ${homeName}</h3>
-      <p class="analysis-subtitle">Comparación pregame NBA</p>
+      <p class="analysis-subtitle">Análisis pregame NBA</p>
       <p class="analysis-date">${gameDate}</p>
     </div>
 
-    <div class="pregame-compare">
-      <div class="pregame-row pregame-head">
-        <div>${awayName}</div>
-        <div>Métrica</div>
-        <div>${homeName}</div>
-      </div>
-
-      <div class="pregame-row">
-        <div class="away">${awayStats.conference}</div>
-        <div class="metric">Conferencia</div>
-        <div class="home">${homeStats.conference}</div>
-      </div>
-
-      <div class="pregame-row">
-        <div class="away">${awayStats.record}</div>
-        <div class="metric">Récord</div>
-        <div class="home">${homeStats.record}</div>
-      </div>
-
-      <div class="pregame-row">
-        <div class="away">${awayStats.last10}</div>
-        <div class="metric">Últimos 10</div>
-        <div class="home">${homeStats.last10}</div>
-      </div>
-
-      <div class="pregame-row">
-        <div class="away">${awayStats.streak}</div>
-        <div class="metric">Racha</div>
-        <div class="home">${homeStats.streak}</div>
-      </div>
-
-      <div class="pregame-row">
-        <div class="away">Pendiente</div>
-        <div class="metric">PPG</div>
-        <div class="home">Pendiente</div>
-      </div>
-
-      <div class="pregame-row">
-        <div class="away">Pendiente</div>
-        <div class="metric">OPP PPG</div>
-        <div class="home">Pendiente</div>
-      </div>
-
-      <div class="pregame-row">
-        <div class="away">Pendiente</div>
-        <div class="metric">Diferencial</div>
-        <div class="home">Pendiente</div>
-      </div>
-
-      <div class="pregame-row">
-        <div class="away">Pendiente</div>
-        <div class="metric">B2B</div>
-        <div class="home">Pendiente</div>
-      </div>
-    </div>
-
     <div class="betting-notes">
-      <h4>Notas de apuesta</h4>
-      <p>Comparación base de forma reciente y posición general del matchup.</p>
+      <h4>Notas</h4>
+      <p>Récord visitante: ${awayStats.record}</p>
+      <p>Récord local: ${homeStats.record}</p>
+      <p>Últimos 10 visitante: ${awayStats.last10}</p>
+      <p>Últimos 10 local: ${homeStats.last10}</p>
+      <p>Racha visitante: ${awayStats.streak}</p>
+      <p>Racha local: ${homeStats.streak}</p>
     </div>
   </div>
 `;
