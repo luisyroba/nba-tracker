@@ -156,43 +156,63 @@ async function analyzeGame(gameId) {
           <p class="analysis-date">${gameDate}</p>
         </div>
 
-        <div class="stats-table">
-          <div class="stats-head team-left">${awayName}</div>
-          <div class="stats-head stat-middle">Métrica</div>
-          <div class="stats-head team-right">${homeName}</div>
+       <div class="stats-wrap">
+  <div class="stats-table">
+    <div class="stats-row stats-header-row">
+      <div class="stats-head team-left">${awayName}</div>
+      <div class="stats-head stat-middle">Métrica</div>
+      <div class="stats-head team-right">${homeName}</div>
+    </div>
 
-          <div class="stats-cell">${awayStats.conference}</div>
-          <div class="stats-cell stat-name">Conferencia</div>
-          <div class="stats-cell">${homeStats.conference}</div>
+    <div class="stats-row">
+      <div class="stats-cell team-value">${awayStats.conference}</div>
+      <div class="stats-cell stat-name">Conferencia</div>
+      <div class="stats-cell team-value">${homeStats.conference}</div>
+    </div>
 
-          <div class="stats-cell">${awayStats.record}</div>
-          <div class="stats-cell stat-name">Récord</div>
-          <div class="stats-cell">${homeStats.record}</div>
+    <div class="stats-row">
+      <div class="stats-cell team-value">${awayStats.record}</div>
+      <div class="stats-cell stat-name">Récord</div>
+      <div class="stats-cell team-value">${homeStats.record}</div>
+    </div>
 
-          <div class="stats-cell">${awayStats.last10}</div>
-          <div class="stats-cell stat-name">Últimos 10</div>
-          <div class="stats-cell">${homeStats.last10}</div>
+    <div class="stats-row">
+      <div class="stats-cell team-value">${awayStats.last10}</div>
+      <div class="stats-cell stat-name">Últimos 10</div>
+      <div class="stats-cell team-value">${homeStats.last10}</div>
+    </div>
 
-          <div class="stats-cell">${awayStats.streak}</div>
-          <div class="stats-cell stat-name">Racha</div>
-          <div class="stats-cell">${homeStats.streak}</div>
+    <div class="stats-row">
+      <div class="stats-cell team-value">${awayStats.streak}</div>
+      <div class="stats-cell stat-name">Racha</div>
+      <div class="stats-cell team-value">${homeStats.streak}</div>
+    </div>
 
-          <div class="stats-cell">Pendiente</div>
-          <div class="stats-cell stat-name">PPG</div>
-          <div class="stats-cell">Pendiente</div>
+    <div class="stats-row">
+      <div class="stats-cell team-value">Pendiente</div>
+      <div class="stats-cell stat-name">PPG</div>
+      <div class="stats-cell team-value">Pendiente</div>
+    </div>
 
-          <div class="stats-cell">Pendiente</div>
-          <div class="stats-cell stat-name">OPP PPG</div>
-          <div class="stats-cell">Pendiente</div>
+    <div class="stats-row">
+      <div class="stats-cell team-value">Pendiente</div>
+      <div class="stats-cell stat-name">OPP PPG</div>
+      <div class="stats-cell team-value">Pendiente</div>
+    </div>
 
-          <div class="stats-cell">Pendiente</div>
-          <div class="stats-cell stat-name">Diferencial</div>
-          <div class="stats-cell">Pendiente</div>
+    <div class="stats-row">
+      <div class="stats-cell team-value">Pendiente</div>
+      <div class="stats-cell stat-name">Diferencial</div>
+      <div class="stats-cell team-value">Pendiente</div>
+    </div>
 
-          <div class="stats-cell">Pendiente</div>
-          <div class="stats-cell stat-name">B2B</div>
-          <div class="stats-cell">Pendiente</div>
-        </div>
+    <div class="stats-row">
+      <div class="stats-cell team-value">Pendiente</div>
+      <div class="stats-cell stat-name">B2B</div>
+      <div class="stats-cell team-value">Pendiente</div>
+    </div>
+  </div>
+</div>
 
         <div class="analysis-grid">
           <div class="analysis-team">
