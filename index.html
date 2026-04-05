@@ -4,62 +4,46 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NBA Betting Dashboard</title>
-  <link rel="stylesheet" href="style.css?v=35" />
+  <link rel="stylesheet" href="style.css?v=42" />
 </head>
 <body>
   <header>
     <h1>NBA Betting Dashboard</h1>
-    <p>Calculadora de EV + registro de picks</p>
+    <p>Listado de partidos NBA</p>
   </header>
 
   <main>
     <section class="card">
-      <h2>Análisis del partido</h2>
-      <div id="analysis-panel">
-        <p>Haz clic en “Analizar partido” para ver detalles.</p>
-      </div>
-    </section>
-
-    <section class="card">
       <h2>Estado</h2>
-      <p id="status">Cargando app...</p>
+      <p id="status">Cargando partidos...</p>
     </section>
 
     <section class="card">
       <h2>Partidos NBA</h2>
-      <div id="games"></div>
-    </section>
-
-    <section class="card">
-      <h2>Calculadora de value</h2>
-      <form id="bet-form">
-        <label>Partido</label>
-        <input type="text" id="match" placeholder="Ej: Lakers vs Warriors" required />
-
-        <label>Mercado</label>
-        <input type="text" id="market" placeholder="Ej: Lakers ML" required />
-
-        <label>Cuota decimal</label>
-        <input type="number" id="odds" step="0.01" placeholder="Ej: 1.72" required />
-
-        <label>Tu probabilidad estimada (%)</label>
-        <input type="number" id="prob" step="0.1" placeholder="Ej: 61" required />
-
-        <label>Stake</label>
-        <input type="number" id="stake" step="0.01" placeholder="Ej: 1" required />
-
-        <button type="submit">Guardar pick</button>
-      </form>
-
-      <div id="calc-result"></div>
-    </section>
-
-    <section class="card">
-      <h2>Mis picks</h2>
-      <div id="picks-list"></div>
+      <div id="games" class="games-grid"></div>
     </section>
   </main>
 
-  <script src="app.js?v=41" defer></script>
+  <div id="game-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" id="modal-close-bg"></div>
+
+    <section
+      class="modal-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      <div class="modal-header">
+        <h2 id="modal-title">Análisis del partido</h2>
+        <button id="modal-close" type="button" aria-label="Cerrar análisis">✕</button>
+      </div>
+
+      <div id="analysis-panel">
+        <p>Haz clic en “Analizar partido” para ver detalles.</p>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js?v=42" defer></script>
 </body>
 </html>
