@@ -173,5 +173,17 @@ main {
 
   .live-extra {
     align-self: flex-start;
+
+    .analysis-box h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 22px;
+  color: #1d428a;
+}
+
+.analysis-box p {
+  margin: 8px 0;
+  font-size: 15px;
+}
   }
 }
