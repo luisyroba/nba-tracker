@@ -36,22 +36,28 @@ async function loadNBAGames() {
 
       const div = document.createElement("div");
       div.className = "game";
-      div.innerHTML = `
-        <div class="teams-row">
-          <div class="team-block">
-            <div class="team-name">${awayName}</div>
-          </div>
-          <div class="game-center">
-            <div class="game-score">${awayScore} - ${homeScore}</div>
-           <div class="game-status">${status}</div>
-           <div class="live-extra">${period ? `Q${period} · ${clock}` : ""}</div>
-           <div class="game-date">${date}</div>
-          </div>
-          <div class="team-block">
-            <div class="team-name">${homeName}</div>
-          </div>
-        </div>
-      `;
+     div.innerHTML = `
+  <div class="teams-row">
+    <div class="team-block">
+      <div class="team-name">${awayName}</div>
+    </div>
+
+    <div class="game-center">
+      <div class="game-score">${awayScore} - ${homeScore}</div>
+      <div class="game-status">${status}</div>
+      <div class="live-extra">${period ? `LIVE · Q${period} · ${clock}` : ""}</div>
+      <div class="game-date">${date}</div>
+    </div>
+
+    <div class="team-block">
+      <div class="team-name">${homeName}</div>
+    </div>
+  </div>
+
+  <button class="analyze-btn" data-game-id="${event.id}">
+    Analizar partido
+  </button>
+`;
       gamesContainer.appendChild(div);
     }
   } catch (error) {
