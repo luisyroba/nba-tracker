@@ -76,7 +76,7 @@ async function analyzeGame(gameId) {
   const panel = document.getElementById("analysis-panel");
   if (!panel) return;
 
-  panel.innerHTML = "<p>Cargando análisis del partido...</p>";
+  panel.innerHTML = "<p>Cargando análisis pregame...</p>";
 
   try {
     const response = await fetch(`https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`);
@@ -96,21 +96,55 @@ async function analyzeGame(gameId) {
 
     const homeName = home && home.team ? home.team.displayName : "Local";
     const awayName = away && away.team ? away.team.displayName : "Visitante";
-    const homeScore = home && home.score ? home.score : "-";
-    const awayScore = away && away.score ? away.score : "-";
-    const status = comp && comp.status && comp.status.type ? comp.status.type.description : "Sin estado";
+
+    const homeRecord = home && home.records && home.records[0] ? home.records[0].summary : "Pendiente";
+    const awayRecord = away && away.records && away.records[0] ? away.records[0].summary : "Pendiente";
+
+    const gameDate = comp && comp.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
 
     panel.innerHTML = `
       <div class="analysis-box">
-        <h3>${awayName} vs ${homeName}</h3>
-        <p><strong>Marcador:</strong> ${awayScore} - ${homeScore}</p>
-        <p><strong>Estado:</strong> ${status}</p>
-        <p><strong>Game ID:</strong> ${gameId}</p>
+        <div class="analysis-header">
+          <h3>${awayName} vs ${homeName}</h3>
+          <p class="analysis-subtitle">Panel pregame comparativo</p>
+          <p class="analysis-date">${gameDate}</p>
+        </div>
+
+        <div class="analysis-grid">
+          <div class="analysis-team">
+            <h4>${awayName}</h4>
+            <p><strong>Récord:</strong> ${awayRecord}</p>
+            <p><strong>Últimos 10:</strong> Pendiente</p>
+            <p><strong>Racha:</strong> Pendiente</p>
+            <p><strong>PPG:</strong> Pendiente</p>
+            <p><strong>OPP PPG:</strong> Pendiente</p>
+            <p><strong>Diferencial:</strong> Pendiente</p>
+            <p><strong>B2B:</strong> Pendiente</p>
+            <p><strong>Lesiones:</strong> Pendiente</p>
+          </div>
+
+          <div class="analysis-team">
+            <h4>${homeName}</h4>
+            <p><strong>Récord:</strong> ${homeRecord}</p>
+            <p><strong>Últimos 10:</strong> Pendiente</p>
+            <p><strong>Racha:</strong> Pendiente</p>
+            <p><strong>PPG:</strong> Pendiente</p>
+            <p><strong>OPP PPG:</strong> Pendiente</p>
+            <p><strong>Diferencial:</strong> Pendiente</p>
+            <p><strong>B2B:</strong> Pendiente</p>
+            <p><strong>Lesiones:</strong> Pendiente</p>
+          </div>
+        </div>
+
+        <div class="betting-notes">
+          <h4>Notas de apuesta</h4>
+          <p>Aquí irán señales pregame como ventaja de descanso, forma reciente, diferencia ofensiva/defensiva y contexto de bajas.</p>
+        </div>
       </div>
     `;
   } catch (error) {
     console.error("ERROR ANALYSIS:", error);
-    panel.innerHTML = "<p>No se pudo cargar el análisis del partido.</p>";
+    panel.innerHTML = "<p>No se pudo cargar el análisis pregame del partido.</p>";
   }
 }
 
