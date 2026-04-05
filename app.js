@@ -102,6 +102,29 @@ async function analyzeGame(gameId) {
 
     const gameDate = comp && comp.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
 
+    const injuries = data.injuries || [];
+
+    const awayInjuries = injuries.filter(item =>
+      item.team && item.team.displayName && item.team.displayName.toLowerCase() === awayName.toLowerCase()
+    );
+
+    const homeInjuries = injuries.filter(item =>
+      item.team && item.team.displayName && item.team.displayName.toLowerCase() === homeName.toLowerCase()
+    );
+
+    const renderInjuries = (teamInjuries) => {
+      if (!teamInjuries.length) {
+        return "<li>Sin lesionados reportados en el feed.</li>";
+      }
+
+      return teamInjuries.map(player => {
+        const athlete = player.athlete && player.athlete.displayName ? player.athlete.displayName : "Jugador";
+        const status = player.status ? player.status : "Sin estatus";
+        const detail = player.detail ? ` - ${player.detail}` : "";
+        return `<li>${athlete} (${status})${detail}</li>`;
+      }).join("");
+    };
+
     panel.innerHTML = `
       <div class="analysis-box">
         <div class="analysis-header">
@@ -124,7 +147,7 @@ async function analyzeGame(gameId) {
             <div class="info-block">
               <h5>Lesionados</h5>
               <ul class="info-list">
-                <li>Pendiente</li>
+                ${renderInjuries(awayInjuries)}
               </ul>
             </div>
 
@@ -149,7 +172,7 @@ async function analyzeGame(gameId) {
             <div class="info-block">
               <h5>Lesionados</h5>
               <ul class="info-list">
-                <li>Pendiente</li>
+                ${renderInjuries(homeInjuries)}
               </ul>
             </div>
 
