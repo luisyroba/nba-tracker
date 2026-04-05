@@ -68,3 +68,4 @@ async function loadNBAGames() {
 }
 
 loadNBAGames();
+setInterval(loadNBAGames, 30000);
