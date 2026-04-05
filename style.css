@@ -128,8 +128,16 @@ main {
   }
 
   .live-extra {
-  margin-top: 6px;
-  font-size: 14px;
-  font-weight: bold;
-  color: #0a7a33;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
 }
