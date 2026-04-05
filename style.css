@@ -16,11 +16,13 @@ header {
 header h1 {
   margin: 0 0 8px;
   font-size: 32px;
+  font-weight: 700;
 }
 
 header p {
   margin: 0;
-  opacity: 0.9;
+  opacity: 0.95;
+  font-size: 15px;
 }
 
 main {
@@ -34,7 +36,7 @@ main {
   border-radius: 16px;
   padding: 20px;
   margin-bottom: 20px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .game {
@@ -70,28 +72,60 @@ main {
   text-align: right;
 }
 
+.team-name {
+  width: 100%;
+  font-size: 18px;
+  font-weight: 700;
+  color: #111;
+  line-height: 1.25;
+}
+
+.team-record {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+}
+
 .game-center {
+  min-width: 190px;
   text-align: center;
-  min-width: 180px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 6px;
 }
 
 .game-score {
   font-size: 28px;
-  font-weight: bold;
+  font-weight: 700;
   color: #1d428a;
+  line-height: 1.1;
 }
 
 .game-status {
-  margin-top: 6px;
-  font-weight: bold;
+  font-size: 14px;
+  font-weight: 700;
   color: #c8102e;
 }
 
+.live-extra {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #16a34a, #15803d);
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .game-date {
-  margin-top: 4px;
   font-size: 14px;
   color: #666;
 }
@@ -105,8 +139,9 @@ main {
   border-radius: 10px;
   padding: 12px;
   font-size: 15px;
-  font-weight: bold;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 0.2s ease;
 }
 
 .analyze-btn:hover {
@@ -119,8 +154,17 @@ main {
     align-items: stretch;
   }
 
-  .game-center {
+  .team-block,
+  .team-block:first-child,
+  .team-block:last-child {
+    min-width: 0;
     text-align: left;
+  }
+
+  .game-center {
+    align-items: flex-start;
+    text-align: left;
+    min-width: 0;
   }
 
   .game-score {
@@ -128,16 +172,6 @@ main {
   }
 
   .live-extra {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 8px;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  color: #ffffff;
-  background: linear-gradient(135deg, #16a34a, #15803d);
-  border-radius: 999px;
-  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
+    align-self: flex-start;
+  }
 }
