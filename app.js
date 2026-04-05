@@ -18,6 +18,106 @@ function closeModal() {
   modal.setAttribute("aria-hidden", "true");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function toNumber(value) {
+  if (value === null || value === undefined) return null;
+  const cleaned = String(value).replace(/[^\d.-]/g, "");
+  const num = Number(cleaned);
+  return Number.isNaN(num) ? null : num;
+}
+
+function parseRecord(recordText) {
+  if (!recordText || typeof recordText !== "string") return null;
+  const parts = recordText.split("-");
+  if (parts.length < 2) return null;
+  const wins = Number(parts[0]);
+  const losses = Number(parts[1]);
+  if (Number.isNaN(wins) || Number.isNaN(losses)) return null;
+  return {
+    wins,
+    losses,
+    pct: wins / (wins + losses)
+  };
+}
+
+function parseLast10(last10Text) {
+  if (!last10Text || typeof last10Text !== "string") return null;
+  const parts = last10Text.split("-");
+  if (parts.length < 2) return null;
+  const wins = Number(parts[0]);
+  const losses = Number(parts[1]);
+  if (Number.isNaN(wins) || Number.isNaN(losses)) return null;
+  return { wins, losses };
+}
+
+function parseStreak(streakText) {
+  if (!streakText || typeof streakText !== "string") return null;
+  const type = streakText.charAt(0).toUpperCase();
+  const value = Number(streakText.slice(1));
+  if (Number.isNaN(value)) return null;
+  if (type === "W") return value;
+  if (type === "L") return -value;
+  return null;
+}
+
+function getStatValue(entry, statNames) {
+  if (!entry?.stats) return "Pendiente";
+
+  const names = Array.isArray(statNames) ? statNames : [statNames];
+
+  for (const name of names) {
+    const stat = entry.stats.find(s => s.name === name);
+    if (stat?.displayValue !== undefined && stat?.displayValue !== null && stat.displayValue !== "") {
+      return stat.displayValue;
+    }
+    if (stat?.value !== undefined && stat?.value !== null && stat.value !== "") {
+      return String(stat.value);
+    }
+  }
+
+  return "Pendiente";
+}
+
+function getConferenceLabel(conferenceName) {
+  if (!conferenceName) return "NBA";
+  const lower = conferenceName.toLowerCase();
+  if (lower.includes("east")) return "Este";
+  if (lower.includes("west")) return "Oeste";
+  return conferenceName;
+}
+
+function buildStatRow(awayValue, label, homeValue, awayClass = "", homeClass = "") {
+  return `
+    <div class="pregame-row">
+      <div class="away ${awayClass}">${escapeHtml(awayValue)}</div>
+      <div class="metric">${escapeHtml(label)}</div>
+      <div class="home ${homeClass}">${escapeHtml(homeValue)}</div>
+    </div>
+  `;
+}
+
+function compareNumbersHigherBetter(awayNum, homeNum) {
+  if (awayNum === null || homeNum === null) return { away: "", home: "" };
+  if (awayNum > homeNum) return { away: "edge", home: "" };
+  if (homeNum > awayNum) return { away: "", home: "edge" };
+  return { away: "", home: "" };
+}
+
+function compareNumbersLowerBetter(awayNum, homeNum) {
+  if (awayNum === null || homeNum === null) return { away: "", home: "" };
+  if (awayNum < homeNum) return { away: "edge", home: "" };
+  if (homeNum < awayNum) return { away: "", home: "edge" };
+  return { away: "", home: "" };
+}
+
 async function loadNBAGames() {
   if (!statusEl || !gamesContainer) return;
 
@@ -60,37 +160,37 @@ async function loadNBAGames() {
       const period = event.status?.period || null;
       const clock = event.status?.displayClock || "";
 
-      const div = document.createElement("article");
-      div.className = "game-card";
+      const card = document.createElement("article");
+      card.className = "game-card";
 
-      div.innerHTML = `
+      card.innerHTML = `
         <div class="game-top">
-          <span class="game-status">${gameStatus}</span>
-          <span class="game-date">${date}</span>
+          <span class="game-status">${escapeHtml(gameStatus)}</span>
+          <span class="game-date">${escapeHtml(date)}</span>
         </div>
 
         <div class="teams">
           <div class="team-row">
-            <span class="team-name">${awayName}</span>
-            <strong class="team-score">${awayScore}</strong>
+            <span class="team-name">${escapeHtml(awayName)}</span>
+            <strong class="team-score">${escapeHtml(awayScore)}</strong>
           </div>
 
           <div class="team-row">
-            <span class="team-name">${homeName}</span>
-            <strong class="team-score">${homeScore}</strong>
+            <span class="team-name">${escapeHtml(homeName)}</span>
+            <strong class="team-score">${escapeHtml(homeScore)}</strong>
           </div>
         </div>
 
-        <div class="live-extra">${period ? `LIVE · Q${period} · ${clock}` : ""}</div>
+        <div class="live-extra">${period ? escapeHtml(`LIVE · Q${period} · ${clock}`) : ""}</div>
 
         <div class="game-actions">
-          <button class="analyze-btn" data-game-id="${event.id}">
+          <button class="analyze-btn" data-game-id="${escapeHtml(event.id)}">
             Analizar partido
           </button>
         </div>
       `;
 
-      gamesContainer.appendChild(div);
+      gamesContainer.appendChild(card);
     }
   } catch (error) {
     console.error("ERROR ESPN:", error);
@@ -138,7 +238,7 @@ async function analyzeGame(gameId) {
       const entries = group?.standings?.entries || [];
       return entries.map((entry, index) => ({
         ...entry,
-        conference: group?.name || "NBA",
+        conference: getConferenceLabel(group?.name || "NBA"),
         conferencePosition: index + 1
       }));
     });
@@ -150,59 +250,29 @@ async function analyzeGame(gameId) {
       });
     }
 
-    function getStatValue(entry, statName) {
-      if (!entry?.stats) return "Pendiente";
-      const stat = entry.stats.find(s => s.name === statName);
-      return stat?.displayValue || stat?.value || "Pendiente";
-    }
-
-    function parseRecord(recordText) {
-      if (!recordText || typeof recordText !== "string") return null;
-      const parts = recordText.split("-");
-      if (parts.length < 2) return null;
-      const wins = Number(parts[0]);
-      const losses = Number(parts[1]);
-      if (Number.isNaN(wins) || Number.isNaN(losses)) return null;
-      return { wins, losses, pct: wins / (wins + losses) };
-    }
-
-    function parseLast10(last10Text) {
-      if (!last10Text || typeof last10Text !== "string") return null;
-      const parts = last10Text.split("-");
-      if (parts.length < 2) return null;
-      const wins = Number(parts[0]);
-      const losses = Number(parts[1]);
-      if (Number.isNaN(wins) || Number.isNaN(losses)) return null;
-      return { wins, losses };
-    }
-
-    function parseStreak(streakText) {
-      if (!streakText || typeof streakText !== "string") return null;
-      const type = streakText.charAt(0).toUpperCase();
-      const value = Number(streakText.slice(1));
-      if (Number.isNaN(value)) return null;
-      if (type === "W") return value;
-      if (type === "L") return -value;
-      return null;
-    }
-
     const awayEntry = findTeamEntry(awayAbbr, awayName);
     const homeEntry = findTeamEntry(homeAbbr, homeName);
 
     const awayStats = {
       conference: awayEntry?.conference || "Pendiente",
       position: awayEntry?.conferencePosition || "-",
-      record: getStatValue(awayEntry, "overall"),
-      last10: getStatValue(awayEntry, "lastTen"),
-      streak: getStatValue(awayEntry, "streak")
+      record: getStatValue(awayEntry, ["overall", "wins"]),
+      last10: getStatValue(awayEntry, ["lastTen", "last_ten"]),
+      streak: getStatValue(awayEntry, ["streak", "strk"]),
+      ppg: getStatValue(awayEntry, ["pointsFor", "avgPointsFor", "ppg"]),
+      oppPpg: getStatValue(awayEntry, ["pointsAgainst", "avgPointsAgainst", "oppPoints", "oppPpg"]),
+      diff: getStatValue(awayEntry, ["pointDifferential", "differential", "diff"])
     };
 
     const homeStats = {
       conference: homeEntry?.conference || "Pendiente",
       position: homeEntry?.conferencePosition || "-",
-      record: getStatValue(homeEntry, "overall"),
-      last10: getStatValue(homeEntry, "lastTen"),
-      streak: getStatValue(homeEntry, "streak")
+      record: getStatValue(homeEntry, ["overall", "wins"]),
+      last10: getStatValue(homeEntry, ["lastTen", "last_ten"]),
+      streak: getStatValue(homeEntry, ["streak", "strk"]),
+      ppg: getStatValue(homeEntry, ["pointsFor", "avgPointsFor", "ppg"]),
+      oppPpg: getStatValue(homeEntry, ["pointsAgainst", "avgPointsAgainst", "oppPoints", "oppPpg"]),
+      diff: getStatValue(homeEntry, ["pointDifferential", "differential", "diff"])
     };
 
     const awayRecordParsed = parseRecord(awayStats.record);
@@ -211,6 +281,12 @@ async function analyzeGame(gameId) {
     const homeLast10Parsed = parseLast10(homeStats.last10);
     const awayStreakParsed = parseStreak(awayStats.streak);
     const homeStreakParsed = parseStreak(homeStats.streak);
+    const awayPpgNum = toNumber(awayStats.ppg);
+    const homePpgNum = toNumber(homeStats.ppg);
+    const awayOppPpgNum = toNumber(awayStats.oppPpg);
+    const homeOppPpgNum = toNumber(homeStats.oppPpg);
+    const awayDiffNum = toNumber(awayStats.diff);
+    const homeDiffNum = toNumber(homeStats.diff);
 
     let awayEdge = 0;
     let homeEdge = 0;
@@ -230,61 +306,129 @@ async function analyzeGame(gameId) {
       if (homeStreakParsed > awayStreakParsed) homeEdge++;
     }
 
-    let edgeText = "Matchup equilibrado";
-    if (awayEdge > homeEdge) edgeText = `Ligera ventaja ${awayName}`;
-    if (homeEdge > awayEdge) edgeText = `Ligera ventaja ${homeName}`;
+    if (awayPpgNum !== null && homePpgNum !== null) {
+      if (awayPpgNum > homePpgNum) awayEdge++;
+      if (homePpgNum > awayPpgNum) homeEdge++;
+    }
 
-    let autoNote = "Sin señal fuerte todavía; conviene revisar mercado y contexto final.";
-    if (awayEdge >= 2) {
-      autoNote = `${awayName} llega con mejor perfil reciente en esta comparación básica.`;
+    if (awayOppPpgNum !== null && homeOppPpgNum !== null) {
+      if (awayOppPpgNum < homeOppPpgNum) awayEdge++;
+      if (homeOppPpgNum < awayOppPpgNum) homeEdge++;
     }
-    if (homeEdge >= 2) {
-      autoNote = `${homeName} llega con mejor perfil reciente en esta comparación básica.`;
+
+    if (awayDiffNum !== null && homeDiffNum !== null) {
+      if (awayDiffNum > homeDiffNum) awayEdge++;
+      if (homeDiffNum > awayDiffNum) homeEdge++;
     }
+
+    let edgeText = "Matchup equilibrado";
+    if (awayEdge > homeEdge) edgeText = `Ventaja ${awayName}`;
+    if (homeEdge > awayEdge) edgeText = `Ventaja ${homeName}`;
+
+    let autoNote = "Comparación base sin señal fuerte; conviene revisar mercado, descanso y bajas.";
+    if (awayEdge >= 4) {
+      autoNote = `${awayName} domina varias métricas base del matchup y llega mejor posicionado en esta lectura pregame.`;
+    } else if (homeEdge >= 4) {
+      autoNote = `${homeName} domina varias métricas base del matchup y llega mejor posicionado en esta lectura pregame.`;
+    } else if (awayEdge > homeEdge) {
+      autoNote = `${awayName} muestra ligera ventaja estadística, pero no necesariamente una señal suficiente por sí sola.`;
+    } else if (homeEdge > awayEdge) {
+      autoNote = `${homeName} muestra ligera ventaja estadística, pero no necesariamente una señal suficiente por sí sola.`;
+    }
+
+    const conferenceCompare = compareNumbersLowerBetter(
+      toNumber(awayStats.position),
+      toNumber(homeStats.position)
+    );
+    const recordCompare = compareNumbersHigherBetter(
+      awayRecordParsed?.pct ?? null,
+      homeRecordParsed?.pct ?? null
+    );
+    const last10Compare = compareNumbersHigherBetter(
+      awayLast10Parsed?.wins ?? null,
+      homeLast10Parsed?.wins ?? null
+    );
+    const streakCompare = compareNumbersHigherBetter(
+      awayStreakParsed,
+      homeStreakParsed
+    );
+    const ppgCompare = compareNumbersHigherBetter(awayPpgNum, homePpgNum);
+    const oppCompare = compareNumbersLowerBetter(awayOppPpgNum, homeOppPpgNum);
+    const diffCompare = compareNumbersHigherBetter(awayDiffNum, homeDiffNum);
 
     analysisPanel.innerHTML = `
       <div class="analysis-box">
         <div class="analysis-header">
-          <h3>${awayName} vs ${homeName}</h3>
+          <h3>${escapeHtml(awayName)} vs ${escapeHtml(homeName)}</h3>
           <p class="analysis-subtitle">Análisis pregame NBA</p>
-          <p class="analysis-date">${gameDate}</p>
+          <p class="analysis-date">${escapeHtml(gameDate)}</p>
         </div>
 
         <div class="betting-notes">
-          <h4>${edgeText}</h4>
-          <p>${autoNote}</p>
+          <h4>${escapeHtml(edgeText)}</h4>
+          <p>${escapeHtml(autoNote)}</p>
         </div>
 
         <div class="pregame-compare">
           <div class="pregame-row pregame-head">
-            <div>${awayName}</div>
+            <div>${escapeHtml(awayName)}</div>
             <div>Métrica</div>
-            <div>${homeName}</div>
+            <div>${escapeHtml(homeName)}</div>
           </div>
 
-          <div class="pregame-row">
-            <div>${awayStats.conference}</div>
-            <div>Conferencia</div>
-            <div>${homeStats.conference}</div>
-          </div>
+          ${buildStatRow(
+            awayStats.conference,
+            "Conferencia",
+            homeStats.conference
+          )}
 
-          <div class="pregame-row">
-            <div>${awayStats.record} · ${awayStats.position}º</div>
-            <div>Récord / Posición</div>
-            <div>${homeStats.record} · ${homeStats.position}º</div>
-          </div>
+          ${buildStatRow(
+            `${awayStats.record} · ${awayStats.position}º`,
+            "Récord / Posición",
+            `${homeStats.record} · ${homeStats.position}º`,
+            recordCompare.away || conferenceCompare.away,
+            recordCompare.home || conferenceCompare.home
+          )}
 
-          <div class="pregame-row">
-            <div>${awayStats.last10}</div>
-            <div>Últimos 10</div>
-            <div>${homeStats.last10}</div>
-          </div>
+          ${buildStatRow(
+            awayStats.last10,
+            "Últimos 10",
+            homeStats.last10,
+            last10Compare.away,
+            last10Compare.home
+          )}
 
-          <div class="pregame-row">
-            <div>${awayStats.streak}</div>
-            <div>Racha</div>
-            <div>${homeStats.streak}</div>
-          </div>
+          ${buildStatRow(
+            awayStats.streak,
+            "Racha",
+            homeStats.streak,
+            streakCompare.away,
+            streakCompare.home
+          )}
+
+          ${buildStatRow(
+            awayStats.ppg,
+            "PPG",
+            homeStats.ppg,
+            ppgCompare.away,
+            ppgCompare.home
+          )}
+
+          ${buildStatRow(
+            awayStats.oppPpg,
+            "OPP PPG",
+            homeStats.oppPpg,
+            oppCompare.away,
+            oppCompare.home
+          )}
+
+          ${buildStatRow(
+            awayStats.diff,
+            "Diferencial",
+            homeStats.diff,
+            diffCompare.away,
+            diffCompare.home
+          )}
         </div>
       </div>
     `;
