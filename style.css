@@ -374,23 +374,27 @@ main {
   line-height: 1.4;
 }
 
-.pregame-compare {
+.pregame-shell {
+  margin-top: 18px;
+}
+
+.pregame-shell .pregame-compare {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 18px;
 }
 
-.pregame-row {
-  display: grid;
-  grid-template-columns: 1fr 140px 1fr;
+.pregame-shell .pregame-row {
+  display: grid !important;
+  grid-template-columns: 1fr 140px 1fr !important;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   overflow: hidden;
   background: #ffffff;
 }
 
-.pregame-row > div {
+.pregame-shell .pregame-row > div {
   padding: 14px 12px;
   font-size: 14px;
   line-height: 1.35;
@@ -398,102 +402,100 @@ main {
   align-items: center;
 }
 
-.pregame-row .metric {
+.pregame-shell .pregame-row .metric {
   justify-content: center;
   background: #f8fafc;
   font-weight: 700;
   text-align: center;
 }
 
-.pregame-row .away {
+.pregame-shell .pregame-row .away {
   justify-content: flex-start;
   font-weight: 700;
+  text-align: left;
 }
 
-.pregame-row .home {
+.pregame-shell .pregame-row .home {
   justify-content: flex-end;
   font-weight: 700;
   text-align: right;
 }
 
-.pregame-head {
+.pregame-shell .pregame-head {
   background: #1d428a;
   border: none;
 }
 
-.pregame-head > div {
+.pregame-shell .pregame-head > div {
   color: #ffffff;
   font-size: 13px;
   font-weight: 700;
 }
 
-.pregame-head > div:nth-child(2) {
+.pregame-shell .pregame-head > div:nth-child(2) {
   justify-content: center;
 }
 
-.pregame-head > div:nth-child(3) {
+.pregame-shell .pregame-head > div:nth-child(3) {
   justify-content: flex-end;
 }
 
 @media (max-width: 768px) {
-  .pregame-head {
-    display: none;
+  .pregame-shell .pregame-head {
+    display: none !important;
   }
 
-  .pregame-row {
-    grid-template-columns: 1fr;
+  .pregame-shell .pregame-row {
+    grid-template-columns: 1fr !important;
     border-radius: 16px;
   }
 
-  .pregame-row .away,
-  .pregame-row .metric,
-  .pregame-row .home {
-    justify-content: flex-start;
-    text-align: left;
-  }
-
-  .pregame-row .away::before {
-    content: "Visitante";
-    display: block;
-    width: 100%;
-    font-size: 11px;
-    font-weight: 600;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin-bottom: 4px;
-  }
-
-  .pregame-row .metric::before {
-    content: "Métrica";
-    display: block;
-    width: 100%;
-    font-size: 11px;
-    font-weight: 600;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin-bottom: 4px;
-  }
-
-  .pregame-row .home::before {
-    content: "Local";
-    display: block;
-    width: 100%;
-    font-size: 11px;
-    font-weight: 600;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin-bottom: 4px;
-  }
-
-  .pregame-row > div {
+  .pregame-shell .pregame-row > div {
     display: block;
     padding: 12px;
   }
 
-  .pregame-row {
-  outline: 3px solid red !important;
+  .pregame-shell .pregame-row .away,
+  .pregame-shell .pregame-row .metric,
+  .pregame-shell .pregame-row .home {
+    text-align: left;
+  }
+
+  .pregame-shell .pregame-row .away::before {
+    content: "Visitante";
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .pregame-shell .pregame-row .metric::before {
+    content: "Métrica";
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .pregame-shell .pregame-row .home::before {
+    content: "Local";
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .pregame-shell {
+  border: 4px solid lime !important;
+}
 }
 }
