@@ -404,7 +404,10 @@ function buildStandingsLookup(standingsData) {
 
   const entries = groups.flatMap(group => {
     const standingsEntries = group?.standings?.entries || [];
-
+    
+if (["TOR", "PHX", "CHA", "MIN", "ORL"].includes(abbr)) {
+  console.log(abbr, entry.stats);
+}
     return standingsEntries.map((entry, index) => {
       const team = entry?.team || {};
       const record = getStatValue(entry, ["overall", "wins"]);
