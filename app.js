@@ -54,7 +54,7 @@ function getStatValue(entry, statNames) {
   const names = Array.isArray(statNames) ? statNames : [statNames];
 
   for (const name of names) {
-    const stat = entry.stats.find(s => s.name === name);
+    const stat = entry.stats.find(s => String(s?.name || "").toLowerCase() === String(name).toLowerCase());
     if (stat?.displayValue !== undefined && stat?.displayValue !== null && stat.displayValue !== "") {
       return stat.displayValue;
     }
@@ -320,16 +320,8 @@ async function fetchTeamSchedule(teamId) {
 function detectClincherFromText(text) {
   const t = String(text || "").toLowerCase();
 
-  if (
-    t.includes("eliminated") ||
-    t.includes("e --")
-  ) return "Eliminado";
-
-  if (
-    t.includes("clinched play-in") ||
-    t.includes("pb --")
-  ) return "Play-in asegurado";
-
+  if (t.includes("eliminated") || t.includes("e --")) return "Eliminado";
+  if (t.includes("clinched play-in") || t.includes("pb --")) return "Play-in asegurado";
   if (
     t.includes("clinched playoff") ||
     t.includes("clinched playoff berth") ||
@@ -352,62 +344,33 @@ function getContextFromConferencePosition(position, clincher = null) {
   return "Fuera de postemporada";
 }
 
-function extractSeedFromStats(entry, fallbackIndex) {
-  const stats = entry?.stats || [];
-
-  const preferredNames = [
-    "playoffSeed",
-    "seed",
-    "rank",
-    "standing",
-    "conferenceRank",
-    "conferenceSeed",
-    "clinchrank"
+async function fetchConferenceStandingsSorted() {
+  const urls = [
+    "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?type=0&level=2&sort=playoffseed:asc",
+    "https://site.web.api.espn.com/apis/v2/sports/basketball/nba/standings?type=0&level=2&sort=playoffseed:asc"
   ];
 
-  for (const preferred of preferredNames) {
-    const stat = stats.find(s => String(s?.name || "").toLowerCase() === preferred.toLowerCase());
-    if (!stat) continue;
-
-    const raw = stat.displayValue ?? stat.value ?? "";
-    const num = Number(String(raw).replace(/[^\d.-]/g, ""));
-    if (!Number.isNaN(num) && num > 0) {
-      return num;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data?.children?.length) return data;
+    } catch (error) {
+      console.warn("Standings fetch failed:", url, error);
     }
   }
 
-  for (const stat of stats) {
-    const name = String(stat?.name || "").toLowerCase();
-    const description = String(stat?.description || "").toLowerCase();
-    const raw = stat?.displayValue ?? stat?.value ?? "";
-
-    if (
-      name.includes("rank") ||
-      name.includes("seed") ||
-      name.includes("standing") ||
-      description.includes("rank") ||
-      description.includes("seed") ||
-      description.includes("standing")
-    ) {
-      const num = Number(String(raw).replace(/[^\d.-]/g, ""));
-      if (!Number.isNaN(num) && num > 0) {
-        return num;
-      }
-    }
-  }
-
-  return fallbackIndex + 1;
+  throw new Error("No se pudo cargar standings ordenados por playoff seed");
 }
 
 function buildStandingsLookup(standingsData) {
   const groups = standingsData?.children || [];
 
   const entries = groups.flatMap(group => {
+    const conference = getConferenceLabel(group?.name || "NBA");
     const standingsEntries = group?.standings?.entries || [];
-    
-if (["TOR", "PHX", "CHA", "MIN", "ORL"].includes(abbr)) {
-  console.log(abbr, entry.stats);
-}
+
     return standingsEntries.map((entry, index) => {
       const team = entry?.team || {};
       const record = getStatValue(entry, ["overall", "wins"]);
@@ -420,21 +383,20 @@ if (["TOR", "PHX", "CHA", "MIN", "ORL"].includes(abbr)) {
         .join(" ");
 
       const noteText =
-        typeof entry?.note === "string"
+        typeof entry?.note === "string'
           ? entry.note
           : JSON.stringify(entry?.note || "");
 
       const combinedText = `${statsText} ${noteText} ${abbr} ${name}`;
       const clincher = detectClincherFromText(combinedText);
-      const conferencePosition = extractSeedFromStats(entry, index);
 
       return {
         rawEntry: entry,
         teamId,
         abbr,
         name,
-        conference: getConferenceLabel(group?.name || "NBA"),
-        conferencePosition,
+        conference,
+        conferencePosition: index + 1,
         record,
         clincher
       };
@@ -586,16 +548,14 @@ async function analyzeGame(gameId) {
   analysisPanel.innerHTML = "<p>Cargando análisis pregame...</p>";
 
   try {
-    const [summaryRes, standingsRes] = await Promise.all([
+    const [summaryRes, standingsData] = await Promise.all([
       fetch(`https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`),
-      fetch("https://site.web.api.espn.com/apis/v2/sports/basketball/nba/standings")
+      fetchConferenceStandingsSorted()
     ]);
 
     if (!summaryRes.ok) throw new Error(`Summary HTTP ${summaryRes.status}`);
-    if (!standingsRes.ok) throw new Error(`Standings HTTP ${standingsRes.status}`);
 
     const summaryData = await summaryRes.json();
-    const standingsData = await standingsRes.json();
     const standingsLookup = buildStandingsLookup(standingsData);
 
     const comp = summaryData?.header?.competitions?.[0] || {};
@@ -632,21 +592,8 @@ async function analyzeGame(gameId) {
       fetchTeamSchedule(homeTeamId)
     ]);
 
-    const awayRecent5 = getRecentFormFromSchedule(
-      awaySchedule,
-      awayTeamId,
-      comp?.date,
-      5,
-      standingsLookup
-    );
-
-    const homeRecent5 = getRecentFormFromSchedule(
-      homeSchedule,
-      homeTeamId,
-      comp?.date,
-      5,
-      standingsLookup
-    );
+    const awayRecent5 = getRecentFormFromSchedule(awaySchedule, awayTeamId, comp?.date, 5, standingsLookup);
+    const homeRecent5 = getRecentFormFromSchedule(homeSchedule, homeTeamId, comp?.date, 5, standingsLookup);
 
     const awayB2B = getB2BStatus(awaySchedule, awayTeamId, comp?.date);
     const homeB2B = getB2BStatus(homeSchedule, homeTeamId, comp?.date);
