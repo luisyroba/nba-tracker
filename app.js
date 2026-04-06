@@ -538,6 +538,25 @@ function extractTeamProfile(statsData) {
   return { ppg, oppPpg };
 }
 
+function getRankFromValue(value, values, higherBetter = true) {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+
+  const cleaned = (Array.isArray(values) ? values : [])
+    .filter(v => v !== null && v !== undefined && !Number.isNaN(v))
+    .map(v => Number(v));
+
+  if (!cleaned.length) return null;
+
+  const uniqueSorted = [...new Set(cleaned)].sort((a, b) => {
+    return higherBetter ? b - a : a - b;
+  });
+
+  const index = uniqueSorted.findIndex(v => v === value);
+  if (index === -1) return null;
+
+  return index + 1;
+}
+
 function rankTierLabel(rank, totalTeams = 30) {
   const num = Number(rank);
   if (Number.isNaN(num) || num <= 0) return "media";
