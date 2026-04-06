@@ -1517,8 +1517,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function loadNBAGames() {
-  if (!gamesContainer) return;
-  if (statusEl) statusEl.textContent = "Cargando partidos NBA reales...";
+  if (!statusEl || !gamesContainer) return;
+  statusEl.textContent = "Cargando partidos NBA reales...";
   gamesContainer.innerHTML = "";
 
   try {
@@ -1536,12 +1536,12 @@ async function loadNBAGames() {
     scoreboardCache = events;
 
     if (!events.length) {
-     if (statusEl) statusEl.textContent = "No se encontraron partidos NBA";
+      statusEl.textContent = "No se encontraron partidos NBA";
       gamesContainer.innerHTML = "<p>No hay juegos disponibles.</p>";
       return;
     }
 
-   if (statusEl) statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
+    statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
     gamesContainer.innerHTML = "";
 
     for (const event of events) {
