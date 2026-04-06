@@ -118,6 +118,164 @@ function compareNumbersLowerBetter(awayNum, homeNum) {
   return { away: "", home: "" };
 }
 
+function average(values) {
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function formatOneDecimal(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "Pendiente";
+  return value.toFixed(1);
+}
+
+function formatSignedOneDecimal(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "Pendiente";
+  return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
+}
+
+function getTeamIdFromCompetitor(competitor) {
+  return competitor?.team?.id || competitor?.id || null;
+}
+
+function normalizeGamesFromSchedule(data) {
+  if (Array.isArray(data?.events)) return data.events;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data)) return data;
+  return [];
+}
+
+function getTeamGameInfo(event, teamId) {
+  const comp = event?.competitions?.[0] || event;
+  const competitors = comp?.competitors || [];
+  const team = competitors.find(c => String(c?.team?.id || c?.id || "") === String(teamId));
+  const opponent = competitors.find(c => String(c?.team?.id || c?.id || "") !== String(teamId));
+
+  if (!team || !opponent) return null;
+
+  const teamScore = toNumber(team?.score);
+  const opponentScore = toNumber(opponent?.score);
+  const gameDate = event?.date || comp?.date || null;
+  const completed = Boolean(comp?.status?.type?.completed || event?.status?.type?.completed);
+
+  return {
+    date: gameDate,
+    completed,
+    homeAway: team?.homeAway || "unknown",
+    teamScore,
+    opponentScore,
+    won: teamScore !== null && opponentScore !== null ? teamScore > opponentScore : null,
+    opponentName: opponent?.team?.displayName || "Rival"
+  };
+}
+
+function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize = 5) {
+  const events = normalizeGamesFromSchedule(data);
+
+  const targetDate = gameDate ? new Date(gameDate).getTime() : Date.now();
+
+  const completedGames = events
+    .map(event => getTeamGameInfo(event, teamId))
+    .filter(Boolean)
+    .filter(game => game.completed && game.date && new Date(game.date).getTime() < targetDate)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, sampleSize);
+
+  const scored = completedGames.map(game => game.teamScore).filter(v => v !== null);
+  const allowed = completedGames.map(game => game.opponentScore).filter(v => v !== null);
+  const differentialValues = completedGames
+    .filter(game => game.teamScore !== null && game.opponentScore !== null)
+    .map(game => game.teamScore - game.opponentScore);
+
+  const wins = completedGames.filter(game => game.won === true).length;
+  const losses = completedGames.filter(game => game.won === false).length;
+
+  return {
+    sampleSize: completedGames.length,
+    record: completedGames.length ? `${wins}-${losses}` : "Pendiente",
+    scoredAvg: average(scored),
+    allowedAvg: average(allowed),
+    diffAvg: average(differentialValues),
+    latestGame: completedGames[0] || null
+  };
+}
+
+function getB2BStatus(data, teamId, gameDate) {
+  const events = normalizeGamesFromSchedule(data);
+  const targetDate = gameDate ? new Date(gameDate) : new Date();
+
+  const previousGames = events
+    .map(event => getTeamGameInfo(event, teamId))
+    .filter(Boolean)
+    .filter(game => game.completed && game.date && new Date(game.date).getTime() < targetDate.getTime())
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const latestGame = previousGames[0];
+  if (!latestGame) {
+    return {
+      isB2B: false,
+      label: "No",
+      detail: "Sin juego previo cercano"
+    };
+  }
+
+  const latestDate = new Date(latestGame.date);
+  const diffMs = targetDate.getTime() - latestDate.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays !== 1) {
+    return {
+      isB2B: false,
+      label: "No",
+      detail: "Descanso normal"
+    };
+  }
+
+  if (latestGame.homeAway === "home") {
+    return {
+      isB2B: true,
+      label: "Sí",
+      detail: "B2B en casa"
+    };
+  }
+
+  if (latestGame.homeAway === "away") {
+    return {
+      isB2B: true,
+      label: "Sí",
+      detail: "B2B con viaje"
+    };
+  }
+
+  return {
+    isB2B: true,
+    label: "Sí",
+    detail: "B2B"
+  };
+}
+
+async function fetchTeamSchedule(teamId) {
+  if (!teamId) return null;
+
+  const urls = [
+    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/schedule`,
+    `https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/schedule`
+  ];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const data = await response.json();
+      const events = normalizeGamesFromSchedule(data);
+      if (events.length) return data;
+    } catch (error) {
+      console.warn("Schedule fetch failed:", url, error);
+    }
+  }
+
+  return null;
+}
+
 async function loadNBAGames() {
   if (!statusEl || !gamesContainer) return;
 
@@ -227,6 +385,8 @@ async function analyzeGame(gameId) {
     const awayName = away?.team?.displayName || "Visitante";
     const homeAbbr = home?.team?.abbreviation || "";
     const awayAbbr = away?.team?.abbreviation || "";
+    const homeTeamId = getTeamIdFromCompetitor(home);
+    const awayTeamId = getTeamIdFromCompetitor(away);
 
     const gameDate = comp?.date
       ? new Date(comp.date).toLocaleString("es-CL")
@@ -250,8 +410,18 @@ async function analyzeGame(gameId) {
       });
     }
 
+    const [awaySchedule, homeSchedule] = await Promise.all([
+      fetchTeamSchedule(awayTeamId),
+      fetchTeamSchedule(homeTeamId)
+    ]);
+
     const awayEntry = findTeamEntry(awayAbbr, awayName);
     const homeEntry = findTeamEntry(homeAbbr, homeName);
+
+    const awayRecent5 = getRecentFormFromSchedule(awaySchedule, awayTeamId, comp?.date, 5);
+    const homeRecent5 = getRecentFormFromSchedule(homeSchedule, homeTeamId, comp?.date, 5);
+    const awayB2B = getB2BStatus(awaySchedule, awayTeamId, comp?.date);
+    const homeB2B = getB2BStatus(homeSchedule, homeTeamId, comp?.date);
 
     const awayStats = {
       conference: awayEntry?.conference || "Pendiente",
@@ -259,9 +429,12 @@ async function analyzeGame(gameId) {
       record: getStatValue(awayEntry, ["overall", "wins"]),
       last10: getStatValue(awayEntry, ["lastTen", "last_ten"]),
       streak: getStatValue(awayEntry, ["streak", "strk"]),
-      ppg: getStatValue(awayEntry, ["pointsFor", "avgPointsFor", "ppg"]),
-      oppPpg: getStatValue(awayEntry, ["pointsAgainst", "avgPointsAgainst", "oppPoints", "oppPpg"]),
-      diff: getStatValue(awayEntry, ["pointDifferential", "differential", "diff"])
+      recentRecord: awayRecent5.record,
+      pointsScoredRecent: formatOneDecimal(awayRecent5.scoredAvg),
+      pointsAllowedRecent: formatOneDecimal(awayRecent5.allowedAvg),
+      diffRecent: formatSignedOneDecimal(awayRecent5.diffAvg),
+      b2b: awayB2B.label,
+      b2bDetail: awayB2B.detail
     };
 
     const homeStats = {
@@ -270,9 +443,12 @@ async function analyzeGame(gameId) {
       record: getStatValue(homeEntry, ["overall", "wins"]),
       last10: getStatValue(homeEntry, ["lastTen", "last_ten"]),
       streak: getStatValue(homeEntry, ["streak", "strk"]),
-      ppg: getStatValue(homeEntry, ["pointsFor", "avgPointsFor", "ppg"]),
-      oppPpg: getStatValue(homeEntry, ["pointsAgainst", "avgPointsAgainst", "oppPoints", "oppPpg"]),
-      diff: getStatValue(homeEntry, ["pointDifferential", "differential", "diff"])
+      recentRecord: homeRecent5.record,
+      pointsScoredRecent: formatOneDecimal(homeRecent5.scoredAvg),
+      pointsAllowedRecent: formatOneDecimal(homeRecent5.allowedAvg),
+      diffRecent: formatSignedOneDecimal(homeRecent5.diffAvg),
+      b2b: homeB2B.label,
+      b2bDetail: homeB2B.detail
     };
 
     const awayRecordParsed = parseRecord(awayStats.record);
@@ -281,12 +457,12 @@ async function analyzeGame(gameId) {
     const homeLast10Parsed = parseLast10(homeStats.last10);
     const awayStreakParsed = parseStreak(awayStats.streak);
     const homeStreakParsed = parseStreak(homeStats.streak);
-    const awayPpgNum = toNumber(awayStats.ppg);
-    const homePpgNum = toNumber(homeStats.ppg);
-    const awayOppPpgNum = toNumber(awayStats.oppPpg);
-    const homeOppPpgNum = toNumber(homeStats.oppPpg);
-    const awayDiffNum = toNumber(awayStats.diff);
-    const homeDiffNum = toNumber(homeStats.diff);
+    const awayRecentScoredNum = toNumber(awayStats.pointsScoredRecent);
+    const homeRecentScoredNum = toNumber(homeStats.pointsScoredRecent);
+    const awayRecentAllowedNum = toNumber(awayStats.pointsAllowedRecent);
+    const homeRecentAllowedNum = toNumber(homeStats.pointsAllowedRecent);
+    const awayRecentDiffNum = toNumber(awayStats.diffRecent);
+    const homeRecentDiffNum = toNumber(homeStats.diffRecent);
 
     let awayEdge = 0;
     let homeEdge = 0;
@@ -306,55 +482,56 @@ async function analyzeGame(gameId) {
       if (homeStreakParsed > awayStreakParsed) homeEdge++;
     }
 
-    if (awayPpgNum !== null && homePpgNum !== null) {
-      if (awayPpgNum > homePpgNum) awayEdge++;
-      if (homePpgNum > awayPpgNum) homeEdge++;
+    if (awayRecentDiffNum !== null && homeRecentDiffNum !== null) {
+      if (awayRecentDiffNum > homeRecentDiffNum) awayEdge++;
+      if (homeRecentDiffNum > awayRecentDiffNum) homeEdge++;
     }
 
-    if (awayOppPpgNum !== null && homeOppPpgNum !== null) {
-      if (awayOppPpgNum < homeOppPpgNum) awayEdge++;
-      if (homeOppPpgNum < awayOppPpgNum) homeEdge++;
-    }
-
-    if (awayDiffNum !== null && homeDiffNum !== null) {
-      if (awayDiffNum > homeDiffNum) awayEdge++;
-      if (homeDiffNum > awayDiffNum) homeEdge++;
-    }
+    if (awayB2B.isB2B && !homeB2B.isB2B) homeEdge++;
+    if (homeB2B.isB2B && !awayB2B.isB2B) awayEdge++;
 
     let edgeText = "Matchup equilibrado";
     if (awayEdge > homeEdge) edgeText = `Ventaja ${awayName}`;
     if (homeEdge > awayEdge) edgeText = `Ventaja ${homeName}`;
 
-    let autoNote = "Comparación base sin señal fuerte; conviene revisar mercado, descanso y bajas.";
-    if (awayEdge >= 4) {
-      autoNote = `${awayName} domina varias métricas base del matchup y llega mejor posicionado en esta lectura pregame.`;
-    } else if (homeEdge >= 4) {
-      autoNote = `${homeName} domina varias métricas base del matchup y llega mejor posicionado en esta lectura pregame.`;
-    } else if (awayEdge > homeEdge) {
-      autoNote = `${awayName} muestra ligera ventaja estadística, pero no necesariamente una señal suficiente por sí sola.`;
-    } else if (homeEdge > awayEdge) {
-      autoNote = `${homeName} muestra ligera ventaja estadística, pero no necesariamente una señal suficiente por sí sola.`;
+    let autoNote = "No hay una señal fuerte todavía; conviene revisar mercado y bajas.";
+    if (awayEdge >= 3) {
+      autoNote = `${awayName} llega mejor en forma reciente o descanso y muestra ventaja pregame.`;
+    } else if (homeEdge >= 3) {
+      autoNote = `${homeName} llega mejor en forma reciente o descanso y muestra ventaja pregame.`;
+    } else if (awayB2B.isB2B || homeB2B.isB2B) {
+      autoNote = "El descanso puede ser clave en este juego por situación de back-to-back.";
     }
 
-    const conferenceCompare = compareNumbersLowerBetter(
-      toNumber(awayStats.position),
-      toNumber(homeStats.position)
-    );
     const recordCompare = compareNumbersHigherBetter(
       awayRecordParsed?.pct ?? null,
       homeRecordParsed?.pct ?? null
     );
+
     const last10Compare = compareNumbersHigherBetter(
       awayLast10Parsed?.wins ?? null,
       homeLast10Parsed?.wins ?? null
     );
+
     const streakCompare = compareNumbersHigherBetter(
       awayStreakParsed,
       homeStreakParsed
     );
-    const ppgCompare = compareNumbersHigherBetter(awayPpgNum, homePpgNum);
-    const oppCompare = compareNumbersLowerBetter(awayOppPpgNum, homeOppPpgNum);
-    const diffCompare = compareNumbersHigherBetter(awayDiffNum, homeDiffNum);
+
+    const recentScoredCompare = compareNumbersHigherBetter(
+      awayRecentScoredNum,
+      homeRecentScoredNum
+    );
+
+    const recentAllowedCompare = compareNumbersLowerBetter(
+      awayRecentAllowedNum,
+      homeRecentAllowedNum
+    );
+
+    const recentDiffCompare = compareNumbersHigherBetter(
+      awayRecentDiffNum,
+      homeRecentDiffNum
+    );
 
     analysisPanel.innerHTML = `
       <div class="analysis-box">
@@ -386,8 +563,8 @@ async function analyzeGame(gameId) {
             `${awayStats.record} · ${awayStats.position}º`,
             "Récord / Posición",
             `${homeStats.record} · ${homeStats.position}º`,
-            recordCompare.away || conferenceCompare.away,
-            recordCompare.home || conferenceCompare.home
+            recordCompare.away,
+            recordCompare.home
           )}
 
           ${buildStatRow(
@@ -407,27 +584,39 @@ async function analyzeGame(gameId) {
           )}
 
           ${buildStatRow(
-            awayStats.ppg,
-            "PPG",
-            homeStats.ppg,
-            ppgCompare.away,
-            ppgCompare.home
+            awayStats.recentRecord,
+            "Últimos 5",
+            homeStats.recentRecord
           )}
 
           ${buildStatRow(
-            awayStats.oppPpg,
-            "OPP PPG",
-            homeStats.oppPpg,
-            oppCompare.away,
-            oppCompare.home
+            awayStats.pointsScoredRecent,
+            "Puntos anotados recientes",
+            homeStats.pointsScoredRecent,
+            recentScoredCompare.away,
+            recentScoredCompare.home
           )}
 
           ${buildStatRow(
-            awayStats.diff,
-            "Diferencial",
-            homeStats.diff,
-            diffCompare.away,
-            diffCompare.home
+            awayStats.pointsAllowedRecent,
+            "Puntos recibidos recientes",
+            homeStats.pointsAllowedRecent,
+            recentAllowedCompare.away,
+            recentAllowedCompare.home
+          )}
+
+          ${buildStatRow(
+            awayStats.diffRecent,
+            "Diferencial reciente",
+            homeStats.diffRecent,
+            recentDiffCompare.away,
+            recentDiffCompare.home
+          )}
+
+          ${buildStatRow(
+            `${awayStats.b2b} · ${awayStats.b2bDetail}`,
+            "Back to Back",
+            `${homeStats.b2b} · ${homeStats.b2bDetail}`
           )}
         </div>
       </div>
