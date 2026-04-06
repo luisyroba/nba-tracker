@@ -30,7 +30,7 @@ header p {
 }
 
 main {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 24px auto;
   padding: 0 16px;
 }
@@ -43,10 +43,10 @@ main {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
-/* GRID NUEVO PARA PARTIDOS */
+/* GRID PARTIDOS */
 #games {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
 }
 
@@ -59,19 +59,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  min-height: 220px;
-}
-
-.game {
-  border: 1px solid #e3e7ef;
-  border-radius: 14px;
-  padding: 16px;
-  margin-bottom: 16px;
-  background: #fbfcff;
-}
-
-.game:last-child {
-  margin-bottom: 0;
+  min-height: 240px;
 }
 
 .game-top {
@@ -93,26 +81,10 @@ main {
   text-align: right;
 }
 
-.teams,
-.teams-row {
+.teams {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: nowrap;
-}
-
-.team-block {
-  flex: 1;
-  min-width: 220px;
-}
-
-.team-block:first-child {
-  text-align: left;
-}
-
-.team-block:last-child {
-  text-align: right;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .team-row {
@@ -127,32 +99,17 @@ main {
 }
 
 .team-name {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   font-size: 17px;
   font-weight: 700;
   color: #111;
   line-height: 1.25;
 }
 
-.team-record {
-  margin-top: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  color: #666;
-}
-
-.game-center {
-  min-width: 190px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.team-score,
-.game-score {
-  font-size: 28px;
+.team-score {
+  flex-shrink: 0;
+  font-size: 26px;
   font-weight: 700;
   color: #1d428a;
   line-height: 1.1;
@@ -162,7 +119,8 @@ main {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 20px;
+  align-self: flex-start;
+  min-height: 32px;
   padding: 6px 12px;
   font-size: 13px;
   font-weight: 700;
@@ -173,6 +131,11 @@ main {
   box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
   line-height: 1;
   white-space: nowrap;
+}
+
+.live-extra.is-final {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  box-shadow: 0 4px 12px rgba(185, 28, 28, 0.24);
 }
 
 .game-actions {
@@ -197,7 +160,7 @@ main {
   background: #16346d;
 }
 
-/* MODAL NUEVO */
+/* MODAL */
 .modal.hidden {
   display: none;
 }
@@ -271,7 +234,6 @@ main {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  margin-top: 0;
 }
 
 .analysis-header h3 {
@@ -290,56 +252,6 @@ main {
   margin: 6px 0 0;
   font-size: 14px;
   color: #444;
-}
-
-.analysis-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.analysis-team {
-  background: #f8faff;
-  border: 1px solid #e2e8f3;
-  border-radius: 14px;
-  padding: 16px;
-}
-
-.analysis-team h4 {
-  margin: 0 0 12px;
-  font-size: 18px;
-  color: #c8102e;
-}
-
-.analysis-team p {
-  margin: 8px 0;
-  font-size: 15px;
-}
-
-.info-block {
-  margin-top: 16px;
-  padding: 14px;
-  background: #ffffff;
-  border: 1px solid #e8edf5;
-  border-radius: 12px;
-}
-
-.info-block h5 {
-  margin: 0 0 10px;
-  font-size: 15px;
-  color: #1d428a;
-}
-
-.info-list {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.info-list li {
-  margin-bottom: 6px;
-  font-size: 14px;
-  color: #333;
-  line-height: 1.4;
 }
 
 .betting-notes {
@@ -437,7 +349,7 @@ main {
   font-weight: 700;
 }
 
-/* CUADROS VISUALES U5 */
+/* FORM U5 */
 .form-chips {
   display: flex;
   align-items: center;
@@ -480,7 +392,6 @@ main {
   background: #dc2626;
 }
 
-/* ESTADOS */
 .empty-state {
   background: white;
   border-radius: 14px;
@@ -489,16 +400,10 @@ main {
   color: #333;
 }
 
-/* RESPONSIVE */
+/* MOBILE */
 @media (max-width: 900px) {
-  main {
-    max-width: 100%;
-    margin: 18px auto;
-    padding: 0 12px;
-  }
-
   #games {
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px;
   }
 
@@ -523,9 +428,50 @@ main {
     font-size: 14px;
   }
 
-  .card {
-    padding: 16px;
-    border-radius: 14px;
+  main {
+    max-width: 100%;
+    margin: 18px auto;
+    padding: 0 12px;
+  }
+
+  #games {
+    grid-template-columns: 1fr;
+  }
+
+  .game-card {
+    min-height: auto;
+    padding: 14px;
+  }
+
+  .game-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .game-date {
+    text-align: left;
+  }
+
+  .team-row {
+    padding: 11px 12px;
+  }
+
+  .team-name {
+    font-size: 16px;
+  }
+
+  .team-score {
+    font-size: 22px;
+  }
+
+  .live-extra {
+    align-self: flex-start;
+  }
+
+  .analyze-btn {
+    padding: 11px 12px;
+    font-size: 14px;
   }
 
   .pregame-shell .pregame-head {
@@ -582,40 +528,8 @@ main {
     letter-spacing: 0.4px;
   }
 
-  .analysis-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .teams,
-  .teams-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .team-block,
-  .team-block:first-child,
-  .team-block:last-child {
-    min-width: 0;
-    text-align: left;
-  }
-
-  .game-center {
-    align-items: flex-start;
-    text-align: left;
-    min-width: 0;
-  }
-
-  .game-score,
-  .team-score {
-    font-size: 24px;
-  }
-
-  .live-extra {
-    align-self: flex-start;
-  }
-
   .modal-header {
-    padding: 14px 14px;
+    padding: 14px;
   }
 
   #analysis-panel,
@@ -640,44 +554,6 @@ main {
 
   main {
     padding: 0 10px;
-  }
-
-  #games {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .game-card {
-    padding: 14px;
-    border-radius: 14px;
-    min-height: auto;
-  }
-
-  .game-top {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-
-  .game-date {
-    text-align: left;
-  }
-
-  .team-row {
-    padding: 11px 12px;
-  }
-
-  .team-name {
-    font-size: 16px;
-  }
-
-  .team-score {
-    font-size: 22px;
-  }
-
-  .analyze-btn {
-    padding: 11px 12px;
-    font-size: 14px;
   }
 
   .modal-panel {
