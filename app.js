@@ -772,6 +772,12 @@ function impliedProbabilityFromDecimal(decimalOdds) {
   return 1 / odds;
 }
 
+function decimalFromImpliedProbability(probability) {
+  const p = Number(probability);
+  if (!p || Number.isNaN(p) || p <= 0 || p >= 1) return null;
+  return 1 / p;
+}
+
 function getBookmakerPriorityIndex(key) {
   const idx = BOOKMAKER_PRIORITY.indexOf(String(key || "").toLowerCase());
   return idx === -1 ? 999 : idx;
@@ -843,34 +849,310 @@ function findOutcomeByTeamName(outcomes, teamName) {
   return (outcomes || []).find(outcome => normalizeString(outcome?.name) === target) || null;
 }
 
-function classifyBetStrength(edgeGap, odds) {
-  if (edgeGap >= 5 && odds >= 1.5) return { level: "Fuerte", stake: "10% del bank" };
-  if (edgeGap >= 3 && odds >= 1.5) return { level: "Medio", stake: "7% del bank" };
-  if (edgeGap >= 2 && odds >= 1.5) return { level: "Leve", stake: "5% del bank" };
+function classifyBetStrength(edgeGap, odds, contextPenalty = 0) {
+  const adjustedGap = Math.max(0, edgeGap - contextPenalty);
+  if (adjustedGap >= 5 && odds >= 1.5) return { level: "Fuerte", stake: "10% del bank" };
+  if (adjustedGap >= 3 && odds >= 1.5) return { level: "Medio", stake: "7% del bank" };
+  if (adjustedGap >= 2 && odds >= 1.5) return { level: "Leve", stake: "5% del bank" };
   return { level: "No bet", stake: "0%" };
 }
 
 function makeNoBet(reason) {
   return {
     selection: null,
-    strength: { level: "No bet", stake: "0%" },
+    strength: { level: "No bet", stake: "0% del bank" },
     reason
   };
 }
 
-function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanText) {
+function estimateAdjustedOdds(basePoint, baseOdds, targetPoint, factorPerPoint = 0.022) {
+  const baseProb = impliedProbabilityFromDecimal(baseOdds);
+  if (baseProb === null) return null;
+
+  const moveTowardBettor = Math.abs(basePoint) - Math.abs(targetPoint);
+  if (moveTowardBettor <= 0) return null;
+
+  const addedProb = moveTowardBettor * factorPerPoint;
+  const estimatedProb = Math.min(0.92, baseProb + addedProb);
+  const estimatedOdds = decimalFromImpliedProbability(estimatedProb);
+  if (estimatedOdds === null) return null;
+  return Number(estimatedOdds.toFixed(2));
+}
+
+function getSuggestedAlternateSpread(mainSpreadPoint, modelMarginAbs) {
+  const spreadAbs = Math.abs(mainSpreadPoint);
+  const modelAbs = Math.abs(modelMarginAbs);
+  if (Number.isNaN(spreadAbs) || Number.isNaN(modelAbs)) return null;
+
+  const safeAbs = Math.max(1.5, Math.floor((Math.max(modelAbs - 1.5, 1.5)) * 2) / 2);
+  if (safeAbs >= spreadAbs) return null;
+
+  return mainSpreadPoint < 0 ? -safeAbs : safeAbs;
+}
+
+function getSuggestedAlternateTotal(mainTotalPoint, projectedTotal, side = "over") {
+  if (mainTotalPoint === null || projectedTotal === null) return null;
+
+  const gap = Math.abs(projectedTotal - mainTotalPoint);
+  if (gap < 4) return null;
+
+  if (side === "over") {
+    const target = Math.floor((mainTotalPoint - 5) * 2) / 2;
+    return target < mainTotalPoint ? target : null;
+  }
+
+  const target = Math.ceil((mainTotalPoint + 5) * 2) / 2;
+  return target > mainTotalPoint ? target : null;
+}
+
+function getLineupStatusScore(label) {
+  const normalized = normalizeString(label);
+  if (normalized.includes("confirmed")) return 1;
+  if (normalized.includes("expected")) return 0.5;
+  return 0;
+}
+
+function deriveInjurySeverity(statusText) {
+  const text = normalizeString(statusText);
+  if (!text) return 0;
+  if (text.includes("out")) return 1.4;
+  if (text.includes("doubt")) return 1.0;
+  if (text.includes("question")) return 0.6;
+  if (text.includes("game time")) return 0.5;
+  if (text.includes("day to day")) return 0.35;
+  return 0.2;
+}
+
+function isKeyPlayerName(playerName) {
+  const words = normalizeString(playerName).split(" ").filter(Boolean);
+  return words.length >= 2;
+}
+
+function summarizeAvailability(availability) {
+  if (!availability) {
+    return {
+      display: "Sin datos",
+      scorePenalty: 0,
+      lineupLabel: "Sin confirmar",
+      injuryCount: 0
+    };
+  }
+
+  const confirmedBonus = availability.lineupConfirmed ? 0.35 : 0;
+  const expectedBonus = availability.lineupExpected && !availability.lineupConfirmed ? 0.15 : 0;
+
+  const injuryPenalty = (availability.injuries || []).reduce((sum, item) => {
+    const weight = isKeyPlayerName(item.player) ? 1 : 0.6;
+    return sum + deriveInjurySeverity(item.status) * weight;
+  }, 0);
+
+  const scorePenalty = Math.max(0, injuryPenalty - confirmedBonus - expectedBonus);
+
+  const lineupLabel = availability.lineupConfirmed
+    ? "Confirmado"
+    : availability.lineupExpected
+      ? "Proyectado"
+      : "Sin confirmar";
+
+  const parts = [];
+  parts.push(`Lineup ${lineupLabel}`);
+  if (availability.injuries?.length) {
+    parts.push(`${availability.injuries.length} bajas/dudas`);
+  }
+
+  return {
+    display: parts.join(" · "),
+    scorePenalty: Number(scorePenalty.toFixed(2)),
+    lineupLabel,
+    injuryCount: availability.injuries?.length || 0
+  };
+}
+
+async function fetchEspnInjuriesPage(teamAbbr = "") {
+  if (!teamAbbr) return "";
+  const urls = [
+    `https://www.espn.com/nba/injuries/_/team/${teamAbbr.toLowerCase()}`,
+    "https://www.espn.com/nba/injuries"
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (text) return text;
+    } catch (error) {
+      console.warn("Injuries fetch failed:", url, error);
+    }
+  }
+
+  return "";
+}
+
+function extractEspnTeamInjuries(html, teamName, teamAbbr) {
+  const normalizedTeamName = normalizeString(teamName);
+  const normalizedTeamAbbr = normalizeString(teamAbbr);
+  const text = String(html || "");
+
+  if (!text) return [];
+
+  const rows = [];
+  const playerPattern = /"name":"([^"]+)".{0,220}?"position":"?([^",}]*)"?[\s\S]{0,260}?"status":"([^"]+)"/gi;
+  let match;
+
+  while ((match = playerPattern.exec(text)) !== null) {
+    const player = match[1];
+    const position = match[2];
+    const status = match[3];
+
+    rows.push({ player, position, status });
+  }
+
+  const filtered = rows.filter(row => {
+    const rowText = normalizeString(`${row.player} ${row.position} ${row.status} ${teamName} ${teamAbbr}`);
+    return normalizedTeamName ? rowText.includes(normalizedTeamName) || rowText.includes(normalizedTeamAbbr) : true;
+  });
+
+  return filtered.slice(0, 8);
+}
+
+async function fetchRotowireLineupsHtml(dateMode = "today") {
+  const url = dateMode === "tomorrow"
+    ? "https://www.rotowire.com/basketball/nba-lineups.php?date=tomorrow"
+    : "https://www.rotowire.com/basketball/nba-lineups.php";
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return "";
+    return await res.text();
+  } catch (error) {
+    console.warn("RotoWire fetch failed:", url, error);
+    return "";
+  }
+}
+
+function extractTeamLineupInfoFromHtml(html, teamName, teamAbbr) {
+  const safeHtml = String(html || "");
+  const normalizedTeamName = normalizeString(teamName);
+  const normalizedTeamAbbr = normalizeString(teamAbbr);
+
+  if (!safeHtml) {
+    return {
+      lineupConfirmed: false,
+      lineupExpected: false,
+      starters: [],
+      injuries: []
+    };
+  }
+
+  const text = safeHtml
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+
+  const normalizedText = normalizeString(text);
+
+  const foundTeam = normalizedTeamName && (
+    normalizedText.includes(normalizedTeamName) || normalizedText.includes(normalizedTeamAbbr)
+  );
+
+  if (!foundTeam) {
+    return {
+      lineupConfirmed: false,
+      lineupExpected: false,
+      starters: [],
+      injuries: []
+    };
+  }
+
+  const lineupConfirmed = normalizedText.includes("confirmed lineup");
+  const lineupExpected = lineupConfirmed || normalizedText.includes("expected lineup");
+
+  const injuryMatches = [];
+  const mayNotPlayPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z'.-]+)+)\s+(Out|Questionable|Doubtful|Game Time Decision|Day-To-Day)/g;
+  let match;
+  while ((match = mayNotPlayPattern.exec(text)) !== null) {
+    injuryMatches.push({
+      player: match[1],
+      status: match[2]
+    });
+  }
+
+  return {
+    lineupConfirmed,
+    lineupExpected,
+    starters: [],
+    injuries: injuryMatches.slice(0, 6)
+  };
+}
+
+async function getTeamAvailability(teamName, teamAbbr) {
+  const [espnHtml, rwTodayHtml, rwTomorrowHtml] = await Promise.all([
+    fetchEspnInjuriesPage(teamAbbr),
+    fetchRotowireLineupsHtml("today"),
+    fetchRotowireLineupsHtml("tomorrow")
+  ]);
+
+  const espnInjuries = extractEspnTeamInjuries(espnHtml, teamName, teamAbbr);
+  const rwToday = extractTeamLineupInfoFromHtml(rwTodayHtml, teamName, teamAbbr);
+  const rwTomorrow = extractTeamLineupInfoFromHtml(rwTomorrowHtml, teamName, teamAbbr);
+
+  const lineupSource = rwToday.lineupExpected || rwToday.lineupConfirmed ? rwToday : rwTomorrow;
+
+  const mergedInjuries = [...espnInjuries];
+  for (const item of lineupSource.injuries || []) {
+    const exists = mergedInjuries.some(existing => normalizeString(existing.player) === normalizeString(item.player));
+    if (!exists) {
+      mergedInjuries.push({
+        player: item.player,
+        position: "",
+        status: item.status
+      });
+    }
+  }
+
+  return {
+    lineupConfirmed: Boolean(lineupSource.lineupConfirmed),
+    lineupExpected: Boolean(lineupSource.lineupExpected),
+    injuries: mergedInjuries.slice(0, 8)
+  };
+}
+
+function renderAvailabilityInfo(summary) {
+  if (!summary) return "Sin datos";
+  return `${summary.display}`;
+}
+
+function renderInjuryList(summary, teamName) {
+  if (!summary?.injuries?.length) {
+    return `<p class="mini-note">${escapeHtml(teamName)}: sin bajas relevantes detectadas.</p>`;
+  }
+
+  return `
+    <div class="injury-mini-list">
+      ${summary.injuries.slice(0, 5).map(item => `
+        <p class="mini-note">${escapeHtml(teamName)} · ${escapeHtml(item.player)}: ${escapeHtml(item.status || "Pendiente")}</p>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanText, availabilityNote = "") {
   return `
     <div class="betting-notes">
       <h4>${escapeHtml(edgeText)}</h4>
       <p>${escapeHtml(autoNote)}</p>
       <p style="margin-top:10px;"><strong>${escapeHtml(leanText)}</strong></p>
+      ${availabilityNote ? `<p style="margin-top:10px;">${escapeHtml(availabilityNote)}</p>` : ""}
       ${
         recommendation?.selection
           ? `
             <hr style="margin:12px 0; opacity:.15;">
             <p><strong>Pick recomendado:</strong> ${escapeHtml(recommendation.selection.label)}</p>
-            <p>Mercado: ${escapeHtml(recommendation.selection.type.toUpperCase())} · Casa: ${escapeHtml(getBookmakerDisplayName(recommendation.selection.bookmakerKey, recommendation.selection.bookmakerTitle))}</p>
+            <p>Mercado: ${escapeHtml(recommendation.selection.marketLabel || recommendation.selection.type.toUpperCase())} · Casa: ${escapeHtml(getBookmakerDisplayName(recommendation.selection.bookmakerKey, recommendation.selection.bookmakerTitle))}</p>
             <p>Cuota: <strong>${escapeHtml(formatOddsDecimal(recommendation.selection.odds))}</strong> · Prob. implícita: ${escapeHtml(formatPercent(recommendation.selection.impliedProbability))}</p>
+            ${recommendation.selection.isEstimated ? `<p>Línea estimada basada en mercado principal: ${escapeHtml(recommendation.selection.derivedFromLabel || "Sí")}</p>` : ""}
             <p>Fuerza: ${escapeHtml(recommendation.strength.level)} · Stake: ${escapeHtml(recommendation.strength.stake)}</p>
             <p style="margin-top:10px;">${escapeHtml(recommendation.reason || "")}</p>
           `
@@ -884,12 +1166,60 @@ function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanTe
   `;
 }
 
-function selectSideRecommendation(bookmakers, preferredSideName) {
+function selectSideRecommendation(bookmakers, preferredSideName, modelMarginAbs = null) {
   const ordered = sortBookmakersByPriority(bookmakers);
 
   for (const bookmaker of ordered) {
     const h2h = bookmaker?.markets?.find(m => m?.key === "h2h");
     const spreads = bookmaker?.markets?.find(m => m?.key === "spreads");
+
+    const spreadOutcome = findOutcomeByTeamName(spreads?.outcomes || [], preferredSideName);
+    const spreadPrice = Number(spreadOutcome?.price);
+    const spreadPoint = Number(spreadOutcome?.point);
+
+    const hasSpread = spreadOutcome && !Number.isNaN(spreadPrice) && spreadPrice >= 1.5 && !Number.isNaN(spreadPoint);
+    const spreadAbs = Math.abs(spreadPoint);
+    const modelAbs = Number(modelMarginAbs);
+
+    if (hasSpread && modelAbs !== null && !Number.isNaN(modelAbs)) {
+      const spreadIsPlayable =
+        spreadPoint > 0 ||
+        spreadAbs <= Math.max(3.5, modelAbs - 1.5);
+
+      if (spreadIsPlayable && modelAbs >= 4) {
+        return {
+          type: "spread",
+          marketLabel: "SPREAD",
+          bookmakerKey: bookmaker.key,
+          bookmakerTitle: bookmaker.title,
+          side: preferredSideName,
+          line: spreadPoint,
+          label: `${preferredSideName} ${spreadPoint > 0 ? `+${spreadPoint}` : spreadPoint}`,
+          odds: spreadPrice,
+          impliedProbability: impliedProbabilityFromDecimal(spreadPrice),
+          isEstimated: false
+        };
+      }
+
+      const altPoint = getSuggestedAlternateSpread(spreadPoint, modelAbs);
+      const altOdds = altPoint !== null ? estimateAdjustedOdds(spreadPoint, spreadPrice, altPoint, 0.022) : null;
+
+      if (altPoint !== null && altOdds !== null && altOdds >= 1.2 && modelAbs >= 4) {
+        return {
+          type: "alternate_spread_estimated",
+          marketLabel: "SPREAD ALTERNATIVO ESTIMADO",
+          bookmakerKey: bookmaker.key,
+          bookmakerTitle: bookmaker.title,
+          side: preferredSideName,
+          line: altPoint,
+          label: `${preferredSideName} ${altPoint > 0 ? `+${altPoint}` : altPoint}`,
+          odds: altOdds,
+          impliedProbability: impliedProbabilityFromDecimal(altOdds),
+          isEstimated: true,
+          derivedFromLabel: `${preferredSideName} ${spreadPoint > 0 ? `+${spreadPoint}` : spreadPoint} @ ${formatOddsDecimal(spreadPrice)}`
+        };
+      }
+    }
 
     const mlOutcome = findOutcomeByTeamName(h2h?.outcomes || [], preferredSideName);
     const mlPrice = Number(mlOutcome?.price);
@@ -897,29 +1227,29 @@ function selectSideRecommendation(bookmakers, preferredSideName) {
     if (mlOutcome && !Number.isNaN(mlPrice) && mlPrice >= 1.5) {
       return {
         type: "moneyline",
+        marketLabel: "MONEYLINE",
         bookmakerKey: bookmaker.key,
         bookmakerTitle: bookmaker.title,
         side: preferredSideName,
         label: `${preferredSideName} gana`,
         odds: mlPrice,
-        impliedProbability: impliedProbabilityFromDecimal(mlPrice)
+        impliedProbability: impliedProbabilityFromDecimal(mlPrice),
+        isEstimated: false
       };
     }
 
-    const spreadOutcome = findOutcomeByTeamName(spreads?.outcomes || [], preferredSideName);
-    const spreadPrice = Number(spreadOutcome?.price);
-    const spreadPoint = Number(spreadOutcome?.point);
-
-    if (spreadOutcome && !Number.isNaN(spreadPrice) && spreadPrice >= 1.5 && !Number.isNaN(spreadPoint)) {
+    if (hasSpread) {
       return {
         type: "spread",
+        marketLabel: "SPREAD",
         bookmakerKey: bookmaker.key,
         bookmakerTitle: bookmaker.title,
         side: preferredSideName,
         line: spreadPoint,
         label: `${preferredSideName} ${spreadPoint > 0 ? `+${spreadPoint}` : spreadPoint}`,
         odds: spreadPrice,
-        impliedProbability: impliedProbabilityFromDecimal(spreadPrice)
+        impliedProbability: impliedProbabilityFromDecimal(spreadPrice),
+        isEstimated: false
       };
     }
   }
@@ -942,76 +1272,160 @@ function selectTotalRecommendation(bookmakers, projectedTotal) {
     const overPrice = Number(over?.price);
     const underPrice = Number(under?.price);
 
-    if (!Number.isNaN(overPoint) && !Number.isNaN(overPrice) && overPrice >= 1.5 && projectedTotal >= overPoint + 6) {
-      return {
-        type: "total",
-        bookmakerKey: bookmaker.key,
-        bookmakerTitle: bookmaker.title,
-        side: "Over",
-        line: overPoint,
-        label: `Más de ${overPoint}`,
-        odds: overPrice,
-        impliedProbability: impliedProbabilityFromDecimal(overPrice)
-      };
+    if (!Number.isNaN(overPoint) && !Number.isNaN(overPrice) && overPrice >= 1.5) {
+      if (projectedTotal >= overPoint + 6) {
+        const lineTooHigh = projectedTotal >= overPoint + 12 || overPoint >= 235;
+        if (!lineTooHigh) {
+          return {
+            type: "total",
+            marketLabel: "TOTAL",
+            bookmakerKey: bookmaker.key,
+            bookmakerTitle: bookmaker.title,
+            side: "Over",
+            line: overPoint,
+            label: `Más de ${overPoint}`,
+            odds: overPrice,
+            impliedProbability: impliedProbabilityFromDecimal(overPrice),
+            isEstimated: false
+          };
+        }
+
+        const altPoint = getSuggestedAlternateTotal(overPoint, projectedTotal, "over");
+        const altOdds = altPoint !== null ? estimateAdjustedOdds(overPoint, overPrice, altPoint, 0.018) : null;
+
+        if (altPoint !== null && altOdds !== null) {
+          return {
+            type: "alternate_total_estimated",
+            marketLabel: "TOTAL ALTERNATIVO ESTIMADO",
+            bookmakerKey: bookmaker.key,
+            bookmakerTitle: bookmaker.title,
+            side: "Over",
+            line: altPoint,
+            label: `Más de ${altPoint}`,
+            odds: altOdds,
+            impliedProbability: impliedProbabilityFromDecimal(altOdds),
+            isEstimated: true,
+            derivedFromLabel: `Más de ${overPoint} @ ${formatOddsDecimal(overPrice)}`
+          };
+        }
+      }
     }
 
-    if (!Number.isNaN(underPoint) && !Number.isNaN(underPrice) && underPrice >= 1.5 && projectedTotal <= underPoint - 6) {
-      return {
-        type: "total",
-        bookmakerKey: bookmaker.key,
-        bookmakerTitle: bookmaker.title,
-        side: "Under",
-        line: underPoint,
-        label: `Menos de ${underPoint}`,
-        odds: underPrice,
-        impliedProbability: impliedProbabilityFromDecimal(underPrice)
-      };
+    if (!Number.isNaN(underPoint) && !Number.isNaN(underPrice) && underPrice >= 1.5) {
+      if (projectedTotal <= underPoint - 6) {
+        const lineTooLow = projectedTotal <= underPoint - 12 || underPoint <= 210;
+        if (!lineTooLow) {
+          return {
+            type: "total",
+            marketLabel: "TOTAL",
+            bookmakerKey: bookmaker.key,
+            bookmakerTitle: bookmaker.title,
+            side: "Under",
+            line: underPoint,
+            label: `Menos de ${underPoint}`,
+            odds: underPrice,
+            impliedProbability: impliedProbabilityFromDecimal(underPrice),
+            isEstimated: false
+          };
+        }
+
+        const altPoint = getSuggestedAlternateTotal(underPoint, projectedTotal, "under");
+        const altOdds = altPoint !== null ? estimateAdjustedOdds(underPoint, underPrice, altPoint, 0.018) : null;
+
+        if (altPoint !== null && altOdds !== null) {
+          return {
+            type: "alternate_total_estimated",
+            marketLabel: "TOTAL ALTERNATIVO ESTIMADO",
+            bookmakerKey: bookmaker.key,
+            bookmakerTitle: bookmaker.title,
+            side: "Under",
+            line: altPoint,
+            label: `Menos de ${altPoint}`,
+            odds: altOdds,
+            impliedProbability: impliedProbabilityFromDecimal(altOdds),
+            isEstimated: true,
+            derivedFromLabel: `Menos de ${underPoint} @ ${formatOddsDecimal(underPrice)}`
+          };
+        }
+      }
     }
   }
 
   return null;
 }
 
-function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, homeEdge, projectedTotal }) {
+function buildOddsRecommendation({
+  oddsEvent,
+  awayName,
+  homeName,
+  awayEdge,
+  homeEdge,
+  projectedTotal,
+  projectedSpread,
+  awayAvailabilityPenalty = 0,
+  homeAvailabilityPenalty = 0
+}) {
   if (!oddsEvent?.bookmakers?.length) {
     return makeNoBet("No se encontraron cuotas disponibles para este partido.");
   }
 
-  const edgeGap = Math.abs(awayEdge - homeEdge);
-  const sideThreshold = 2;
-  const totalOnlyThreshold = 1;
+  const adjustedAwayEdge = awayEdge - awayAvailabilityPenalty;
+  const adjustedHomeEdge = homeEdge - homeAvailabilityPenalty;
+  const edgeGap = Math.abs(adjustedAwayEdge - adjustedHomeEdge);
+  const contextPenalty = Math.max(awayAvailabilityPenalty, homeAvailabilityPenalty) >= 1.5 ? 1 : 0;
 
-  if (awayEdge >= homeEdge + sideThreshold) {
-    const selection = selectSideRecommendation(oddsEvent.bookmakers, awayName);
-    if (!selection) return makeNoBet(`La lectura favorece a ${awayName}, pero no apareció una ML o spread jugable desde cuota 1.50.`);
+  if (adjustedAwayEdge >= adjustedHomeEdge + 2) {
+    const selection = selectSideRecommendation(oddsEvent.bookmakers, awayName, Math.abs(projectedSpread));
+    if (!selection) {
+      const totalFallback = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
+      if (!totalFallback) {
+        return makeNoBet(`La lectura favorece a ${awayName}, pero no apareció una ML, spread o total jugable.`);
+      }
+      return {
+        selection: totalFallback,
+        strength: classifyBetStrength(2, totalFallback.odds, contextPenalty),
+        reason: `El lado favorece a ${awayName}, pero el mejor encaje de mercado termina estando en el total.`
+      };
+    }
+
     return {
       selection,
-      strength: classifyBetStrength(edgeGap, selection.odds),
-      reason: `${awayName} es el lado que respalda la lectura estadística del matchup.`
+      strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
+      reason: `${awayName} es el lado que mejor respalda la lectura estadística del matchup.`
     };
   }
 
-  if (homeEdge >= awayEdge + sideThreshold) {
-    const selection = selectSideRecommendation(oddsEvent.bookmakers, homeName);
-    if (!selection) return makeNoBet(`La lectura favorece a ${homeName}, pero no apareció una ML o spread jugable desde cuota 1.50.`);
+  if (adjustedHomeEdge >= adjustedAwayEdge + 2) {
+    const selection = selectSideRecommendation(oddsEvent.bookmakers, homeName, Math.abs(projectedSpread));
+    if (!selection) {
+      const totalFallback = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
+      if (!totalFallback) {
+        return makeNoBet(`La lectura favorece a ${homeName}, pero no apareció una ML, spread o total jugable.`);
+      }
+      return {
+        selection: totalFallback,
+        strength: classifyBetStrength(2, totalFallback.odds, contextPenalty),
+        reason: `El lado favorece a ${homeName}, pero el mejor encaje de mercado termina estando en el total.`
+      };
+    }
+
     return {
       selection,
-      strength: classifyBetStrength(edgeGap, selection.odds),
-      reason: `${homeName} es el lado que respalda la lectura estadística del matchup.`
+      strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
+      reason: `${homeName} es el lado que mejor respalda la lectura estadística del matchup.`
     };
   }
 
-  if (edgeGap <= totalOnlyThreshold) {
-    const selection = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
-    if (!selection) return makeNoBet("Matchup equilibrado y sin total con valor suficiente desde cuota 1.50.");
+  const totalSelection = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
+  if (totalSelection) {
     return {
-      selection,
-      strength: classifyBetStrength(2, selection.odds),
-      reason: "Como el lado está equilibrado, el mejor ángulo aparece en el total."
+      selection: totalSelection,
+      strength: classifyBetStrength(2, totalSelection.odds, contextPenalty),
+      reason: "Como el lado está equilibrado, el mejor ángulo del matchup aparece en el total."
     };
   }
 
-  return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadísticas.");
+  return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadísticas y la disponibilidad.");
 }
 
 function getLocalScoreboardDate(offsetDays = 0) {
@@ -1194,11 +1608,13 @@ async function analyzeGame(gameId) {
 
     const gameDate = comp?.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
 
-    const [standingsRes, awayScheduleRes, homeScheduleRes, oddsRes] = await Promise.allSettled([
+    const [standingsRes, awayScheduleRes, homeScheduleRes, oddsRes, awayAvailRes, homeAvailRes] = await Promise.allSettled([
       fetchConferenceStandingsSorted(),
       fetchTeamSchedule(awayTeamId),
       fetchTeamSchedule(homeTeamId),
-      fetchOddsApiEvents()
+      fetchOddsApiEvents(),
+      getTeamAvailability(awayName, awayAbbr),
+      getTeamAvailability(homeName, homeAbbr)
     ]);
 
     const standingsData = standingsRes.status === "fulfilled" ? standingsRes.value : null;
@@ -1254,6 +1670,12 @@ async function analyzeGame(gameId) {
       label: "Ataque medio | Defensa media"
     };
 
+    const awayAvailability = awayAvailRes.status === "fulfilled" ? awayAvailRes.value : null;
+    const homeAvailability = homeAvailRes.status === "fulfilled" ? homeAvailRes.value : null;
+
+    const awayAvailabilitySummary = summarizeAvailability(awayAvailability);
+    const homeAvailabilitySummary = summarizeAvailability(homeAvailability);
+
     const awayStats = {
       conference: awayEntry?.conference || "Pendiente",
       position: awayEntry?.conferencePosition || "-",
@@ -1266,7 +1688,8 @@ async function analyzeGame(gameId) {
       rivalQuality: getOpponentStrengthLabel(awayRecent5.opponentPctAvg),
       venueSplit: `Fuera: ${awayVenueSplit.record}, margen ${formatSignedOneDecimal(awayVenueSplit.diffAvg)}`,
       teamStyle: awayProfileRanked.label,
-      b2b: `${awayB2B.label} · ${awayB2B.detail}`
+      b2b: `${awayB2B.label} · ${awayB2B.detail}`,
+      availability: renderAvailabilityInfo(awayAvailabilitySummary)
     };
 
     const homeStats = {
@@ -1281,7 +1704,8 @@ async function analyzeGame(gameId) {
       rivalQuality: getOpponentStrengthLabel(homeRecent5.opponentPctAvg),
       venueSplit: `Casa: ${homeVenueSplit.record}, margen ${formatSignedOneDecimal(homeVenueSplit.diffAvg)}`,
       teamStyle: homeProfileRanked.label,
-      b2b: `${homeB2B.label} · ${homeB2B.detail}`
+      b2b: `${homeB2B.label} · ${homeB2B.detail}`,
+      availability: renderAvailabilityInfo(homeAvailabilitySummary)
     };
 
     const awayRecordParsed = parseRecord(awayStats.record);
@@ -1339,6 +1763,9 @@ async function analyzeGame(gameId) {
     if (awayB2B.isB2B && !homeB2B.isB2B) homeEdge += 1;
     if (homeB2B.isB2B && !awayB2B.isB2B) awayEdge += 1;
 
+    awayEdge = Math.max(0, awayEdge - awayAvailabilitySummary.scorePenalty);
+    homeEdge = Math.max(0, homeEdge - homeAvailabilitySummary.scorePenalty);
+
     let edgeText = "Matchup equilibrado";
     let leanText = "No bet";
 
@@ -1370,6 +1797,12 @@ async function analyzeGame(gameId) {
       }
     }
 
+    if (awayAvailabilitySummary.scorePenalty >= 1.2 || homeAvailabilitySummary.scorePenalty >= 1.2) {
+      autoNote += " La disponibilidad de jugadores ajusta la confianza del pick.";
+    }
+
+    const availabilityNote = `${awayName}: ${awayStats.availability} · ${homeName}: ${homeStats.availability}`;
+
     const recordCompare = compareNumbersHigherBetter(awayRecordParsed?.pct ?? null, homeRecordParsed?.pct ?? null);
     const recentScoredCompare = compareNumbersHigherBetter(awayRecentScoredNum, homeRecentScoredNum);
     const recentAllowedCompare = compareNumbersLowerBetter(awayRecentAllowedNum, homeRecentAllowedNum);
@@ -1391,6 +1824,11 @@ async function analyzeGame(gameId) {
         ? projectedAwayScore + projectedHomeScore
         : null;
 
+    const projectedSpread =
+      projectedHomeScore !== null && projectedAwayScore !== null
+        ? projectedHomeScore - projectedAwayScore
+        : null;
+
     const oddsEvents =
       oddsRes.status === "fulfilled" && Array.isArray(oddsRes.value)
         ? oddsRes.value
@@ -1404,7 +1842,10 @@ async function analyzeGame(gameId) {
       homeName,
       awayEdge,
       homeEdge,
-      projectedTotal
+      projectedTotal,
+      projectedSpread,
+      awayAvailabilityPenalty: awayAvailabilitySummary.scorePenalty,
+      homeAvailabilityPenalty: homeAvailabilitySummary.scorePenalty
     });
 
     analysisPanel.innerHTML = `
@@ -1415,7 +1856,7 @@ async function analyzeGame(gameId) {
           <p class="analysis-date">${escapeHtml(gameDate)}</p>
         </div>
 
-        ${renderBetRecommendationBlock(betRecommendation, edgeText, autoNote, leanText)}
+        ${renderBetRecommendationBlock(betRecommendation, edgeText, autoNote, leanText, availabilityNote)}
 
         <div class="pregame-shell">
           <div class="pregame-compare">
@@ -1466,6 +1907,27 @@ async function analyzeGame(gameId) {
               adjustedDiffCompare.home
             )}
             ${buildStatRow(escapeHtml(awayStats.b2b), "B2B", escapeHtml(homeStats.b2b))}
+            ${buildStatRow(escapeHtml(awayStats.availability), "Lineup / bajas", escapeHtml(homeStats.availability))}
+            ${buildStatRow(
+              escapeHtml(formatOneDecimal(projectedAwayScore)),
+              "Proy. puntos equipo",
+              escapeHtml(formatOneDecimal(projectedHomeScore))
+            )}
+            ${buildStatRow(
+              escapeHtml(projectedSpread !== null ? formatSignedOneDecimal(-projectedSpread) : "Pendiente"),
+              "Proyección spread",
+              escapeHtml(projectedSpread !== null ? formatSignedOneDecimal(projectedSpread) : "Pendiente")
+            )}
+            ${buildStatRow(
+              escapeHtml(projectedTotal !== null ? formatOneDecimal(projectedTotal) : "Pendiente"),
+              "Proyección total",
+              escapeHtml(projectedTotal !== null ? formatOneDecimal(projectedTotal) : "Pendiente")
+            )}
+          </div>
+
+          <div style="margin-top:14px;">
+            ${renderInjuryList(awayAvailability, awayName)}
+            ${renderInjuryList(homeAvailability, homeName)}
           </div>
         </div>
       </div>
