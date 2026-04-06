@@ -124,13 +124,27 @@ function normalizeGamesFromSchedule(data) {
   return [];
 }
 
-function getContextFromConferencePosition(position) {
+function getContextFromConferencePosition(position, clincher = null) {
+  if (clincher) return clincher;
+
   if (position === null || position === undefined || position === "-") return "Pendiente";
+
   const pos = Number(position);
   if (Number.isNaN(pos)) return "Pendiente";
+
   if (pos >= 1 && pos <= 6) return "Zona de playoffs";
   if (pos >= 7 && pos <= 10) return "Zona de play-in";
   return "Fuera de postemporada";
+}
+
+function getClincherStatusFromEntry(entry) {
+  const raw = `${entry?.team?.shortDisplayName || ""} ${entry?.team?.displayName || ""} ${entry?.note || ""}`.toLowerCase();
+
+  if (raw.includes("eliminated") || raw.includes("e --")) return "Eliminado";
+  if (raw.includes("clinched play-in") || raw.includes("pb --")) return "Play-in asegurado";
+  if (raw.includes("clinched playoff") || raw.includes("x --") || raw.includes("y --")) return "Clasificado a playoffs";
+
+  return null;
 }
 
 function getOpponentStrengthLabel(pct) {
@@ -359,18 +373,45 @@ async function fetchTeamSchedule(teamId) {
 
 function buildStandingsLookup(standingsData) {
   const groups = standingsData?.children || [];
+
   const entries = groups.flatMap(group => {
     const standingsEntries = group?.standings?.entries || [];
+
     return standingsEntries.map((entry, index) => {
       const team = entry?.team || {};
       const record = getStatValue(entry, ["overall", "wins"]);
+
+      const statsText = (entry?.stats || [])
+        .map(stat => `${stat?.name || ""} ${stat?.displayValue || ""} ${stat?.description || ""}`)
+        .join(" ")
+        .toLowerCase();
+
+      const noteText = `${entry?.note || ""}`.toLowerCase();
+      const teamText = `${team?.displayName || ""} ${team?.abbreviation || ""}`.toLowerCase();
+      const combinedText = `${statsText} ${noteText} ${teamText}`;
+
+      let clincher = null;
+      if (combinedText.includes("eliminated") || combinedText.includes("e --")) {
+        clincher = "Eliminado";
+      } else if (combinedText.includes("clinched play-in") || combinedText.includes("pb --")) {
+        clincher = "Play-in asegurado";
+      } else if (
+        combinedText.includes("clinched playoff") ||
+        combinedText.includes("x --") ||
+        combinedText.includes("y --")
+      ) {
+        clincher = "Clasificado a playoffs";
+      }
+
       return {
+        rawEntry: entry,
         teamId: String(team?.id || ""),
         abbr: team?.abbreviation || "",
         name: team?.displayName || "",
         conference: getConferenceLabel(group?.name || "NBA"),
         conferencePosition: index + 1,
-        record
+        record,
+        clincher
       };
     });
   });
@@ -582,8 +623,15 @@ async function analyzeGame(gameId) {
     const awayB2B = getB2BStatus(awaySchedule, awayTeamId, comp?.date);
     const homeB2B = getB2BStatus(homeSchedule, homeTeamId, comp?.date);
 
-    const awayContext = getContextFromConferencePosition(awayEntry?.conferencePosition);
-    const homeContext = getContextFromConferencePosition(homeEntry?.conferencePosition);
+const awayContext = getContextFromConferencePosition(
+  awayEntry?.conferencePosition,
+  awayEntry?.clincher || null
+);
+
+const homeContext = getContextFromConferencePosition(
+  homeEntry?.conferencePosition,
+  homeEntry?.clincher || null
+);
 
     const awayStats = {
       conference: awayEntry?.conference || "Pendiente",
