@@ -807,7 +807,6 @@ async function fetchOddsApiEvents() {
         const rawOdds = Number(bmData.odds);
         if (!rawOdds || Number.isNaN(rawOdds)) continue;
 
-        // Convertir American → Decimal
         let price;
         if (rawOdds > 0) price = rawOdds / 100 + 1;
         else if (rawOdds < 0) price = 100 / Math.abs(rawOdds) + 1;
@@ -822,13 +821,11 @@ async function fetchOddsApiEvents() {
 
         const outcome = { name: outcomeName, price };
 
-        // Spread: el point viene del campo "spread" del bookmaker, o "bookSpread" del odd
         if (marketKey === "spreads") {
           const point = bmData.spread ?? oddData.bookSpread ?? null;
           if (point !== null) outcome.point = Number(point);
         }
 
-        // Totals: el point viene del campo "overUnder" del bookmaker, o "bookOverUnder" del odd
         if (marketKey === "totals") {
           const point = bmData.overUnder ?? oddData.bookOverUnder ?? null;
           if (point !== null) outcome.point = Number(point);
@@ -872,25 +869,19 @@ function buildOddsApiEventMatchScore(oddsEvent, homeName, awayName, commenceTime
 
   if (!oddsHome || !oddsAway || !targetHome || !targetAway) return 0;
 
-  // Coincidencia fuerte por nombre exacto
   if (oddsHome === targetHome) score += 5;
   else if (oddsHome.includes(targetHome) || targetHome.includes(oddsHome)) score += 3;
 
   if (oddsAway === targetAway) score += 5;
   else if (oddsAway.includes(targetAway) || targetAway.includes(oddsAway)) score += 3;
 
-  // Por si hubiera inversión de local/visitante en alguna fuente
   if (oddsHome === targetAway || oddsAway === targetHome) score += 2;
 
-  // Coincidencia temporal: ventana más amplia
   if (commenceTime && oddsEvent?.commence_time) {
     const diff = Math.abs(
       new Date(oddsEvent.commence_time).getTime() - new Date(commenceTime).getTime()
     );
-
-    // ≤ 4h de diferencia: bonus fuerte
     if (diff <= 1000 * 60 * 240) score += 2;
-    // ≤ 8h de diferencia: bonus suave
     else if (diff <= 1000 * 60 * 480) score += 1;
   }
 
@@ -905,28 +896,22 @@ function findMatchingOddsEvent(oddsEvents, homeName, awayName, commenceTime = nu
       event,
       score: buildOddsApiEventMatchScore(event, homeName, awayName, commenceTime)
     }))
-    .filter(item => item.score >= 6) // antes 10
+    .filter(item => item.score >= 6)
     .sort((a, b) => b.score - a.score);
 
-  if (scored.length) {
-    return scored[0].event;
-  }
+  if (scored.length) return scored[0].event;
 
-  // Fallback: al menos un equipo coincide de forma razonable
   const targetHome = normalizeString(homeName);
   const targetAway = normalizeString(awayName);
 
-  const fallback = oddsEvents.find(event => {
+  return oddsEvents.find(event => {
     const eh = normalizeString(event?.home_team);
     const ea = normalizeString(event?.away_team);
-
     return (
       (eh && (eh.includes(targetHome) || targetHome.includes(eh))) ||
       (ea && (ea.includes(targetAway) || targetAway.includes(ea)))
     );
-  });
-
-  return fallback || null;
+  }) || null;
 }
 
 function normalizeBookmakers(bookmakers) {
@@ -991,60 +976,35 @@ function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanTe
   `;
 }
 
+// ─── PICK LOGIC ──────────────────────────────────────────────────────────────
+
 function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin = null) {
   const ordered = sortBookmakersByPriority(bookmakers);
+  const margin = Number(estimatedMargin);
+  const hasMargin = !Number.isNaN(margin) && estimatedMargin !== null;
+  const marginAbs = hasMargin ? Math.abs(margin) : 0;
 
   for (const bookmaker of ordered) {
-    const h2h = bookmaker?.markets?.find(m => m?.key === "h2h");
+    const h2h     = bookmaker?.markets?.find(m => m?.key === "h2h");
     const spreads = bookmaker?.markets?.find(m => m?.key === "spreads");
 
-    const mlOutcome = findOutcomeByTeamName(h2h?.outcomes || [], preferredSideName);
-    const mlPrice = Number(mlOutcome?.price);
-
+    const mlOutcome     = findOutcomeByTeamName(h2h?.outcomes     || [], preferredSideName);
     const spreadOutcome = findOutcomeByTeamName(spreads?.outcomes || [], preferredSideName);
+
+    const mlPrice     = Number(mlOutcome?.price);
     const spreadPrice = Number(spreadOutcome?.price);
     const spreadPoint = Number(spreadOutcome?.point);
 
-    const hasPlayableML = mlOutcome && !Number.isNaN(mlPrice) && mlPrice >= 1.5;
-    const hasPlayableSpread =
-      spreadOutcome &&
-      !Number.isNaN(spreadPrice) &&
-      spreadPrice >= 1.5 &&
-      !Number.isNaN(spreadPoint);
+    const hasPlayableML     = mlOutcome     && !Number.isNaN(mlPrice)     && mlPrice     >= 1.5;
+    const hasPlayableSpread = spreadOutcome && !Number.isNaN(spreadPrice) && spreadPrice >= 1.5 && !Number.isNaN(spreadPoint);
 
     if (!hasPlayableML && !hasPlayableSpread) continue;
 
-    const margin = Number(estimatedMargin);
-    const hasMargin = !Number.isNaN(margin) && margin !== null;
-
-    if (hasPlayableSpread && hasMargin) {
-      const spreadAbs = Math.abs(spreadPoint);
-      const marginAbs = Math.abs(margin);
-
-      const spreadIsReasonable =
-        spreadPoint > 0 || spreadAbs <= Math.max(1.5, marginAbs - 1.5);
-
-      const modelStrongEnoughForSpread = marginAbs >= 4;
-
-      if (spreadIsReasonable && modelStrongEnoughForSpread) {
-        return {
-          type: "spread",
-          bookmakerKey: bookmaker.key,
-          bookmakerTitle: bookmaker.title,
-          side: preferredSideName,
-          line: spreadPoint,
-          label: `${preferredSideName} ${spreadPoint > 0 ? `+${spreadPoint}` : spreadPoint}`,
-          odds: spreadPrice,
-          impliedProbability: impliedProbabilityFromDecimal(spreadPrice)
-        };
-      }
-    }
-
+    // 1) ML directo si cuota >= 1.50
     if (hasPlayableML) {
       return {
         type: "moneyline",
-        bookmakerKey: bookmaker.key,
-        bookmakerTitle: bookmaker.title,
+        bookmakerKey: bookmaker.key, bookmakerTitle: bookmaker.title,
         side: preferredSideName,
         label: `${preferredSideName} gana`,
         odds: mlPrice,
@@ -1052,13 +1012,54 @@ function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin
       };
     }
 
+    // 2) ML < 1.50 → busca spread oficial
+    if (hasPlayableSpread && hasMargin && marginAbs >= 4) {
+      const spreadAbs = Math.abs(spreadPoint);
+      const spreadIsReasonable = spreadPoint > 0 || spreadAbs <= Math.max(1.5, marginAbs - 1.5);
+
+      if (spreadIsReasonable) {
+        return {
+          type: "spread",
+          bookmakerKey: bookmaker.key, bookmakerTitle: bookmaker.title,
+          side: preferredSideName, line: spreadPoint,
+          label: `${preferredSideName} ${spreadPoint > 0 ? `+${spreadPoint}` : spreadPoint}`,
+          odds: spreadPrice,
+          impliedProbability: impliedProbabilityFromDecimal(spreadPrice)
+        };
+      }
+
+      // 3) Spread oficial agresivo → baja línea de 0.5 en 0.5 hasta encontrar valor
+      const step = 0.5;
+      const maxAlt = -1.5;
+      let candidate = parseFloat((spreadPoint + step).toFixed(1));
+
+      while (candidate <= maxAlt) {
+        const candidateAbs = Math.abs(candidate);
+        const diffFromOfficial = Math.abs(spreadPoint) - candidateAbs;
+        const estimatedPrice = Math.min(2.10, 1.91 + diffFromOfficial * 0.04);
+        const edgeCoversCandidate = marginAbs >= candidateAbs + 2;
+
+        if (edgeCoversCandidate && estimatedPrice >= 1.50) {
+          return {
+            type: "spread",
+            bookmakerKey: bookmaker.key, bookmakerTitle: bookmaker.title,
+            side: preferredSideName, line: candidate,
+            label: `${preferredSideName} ${candidate > 0 ? `+${candidate}` : candidate} (alt.)`,
+            odds: parseFloat(estimatedPrice.toFixed(2)),
+            impliedProbability: impliedProbabilityFromDecimal(estimatedPrice),
+            isAltLine: true
+          };
+        }
+        candidate = parseFloat((candidate + step).toFixed(1));
+      }
+    }
+
+    // 4) Spread sin margen como último recurso
     if (hasPlayableSpread) {
       return {
         type: "spread",
-        bookmakerKey: bookmaker.key,
-        bookmakerTitle: bookmaker.title,
-        side: preferredSideName,
-        line: spreadPoint,
+        bookmakerKey: bookmaker.key, bookmakerTitle: bookmaker.title,
+        side: preferredSideName, line: spreadPoint,
         label: `${preferredSideName} ${spreadPoint > 0 ? `+${spreadPoint}` : spreadPoint}`,
         odds: spreadPrice,
         impliedProbability: impliedProbabilityFromDecimal(spreadPrice)
@@ -1069,45 +1070,59 @@ function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin
   return null;
 }
 
-function selectTotalRecommendation(bookmakers, projectedTotal) {
+function selectTotalRecommendation(bookmakers, projectedTotal, allowAltLines = false) {
   if (projectedTotal === null) return null;
-
   const ordered = sortBookmakersByPriority(bookmakers);
 
   for (const bookmaker of ordered) {
     const totals = bookmaker?.markets?.find(m => m?.key === "totals");
-    const over = (totals?.outcomes || []).find(o => normalizeString(o?.name) === "over");
-    const under = (totals?.outcomes || []).find(o => normalizeString(o?.name) === "under");
+    const over   = (totals?.outcomes || []).find(o => normalizeString(o?.name) === "over");
+    const under  = (totals?.outcomes || []).find(o => normalizeString(o?.name) === "under");
 
-    const overPoint = Number(over?.point);
+    const overPoint  = Number(over?.point);
     const underPoint = Number(under?.point);
-    const overPrice = Number(over?.price);
+    const overPrice  = Number(over?.price);
     const underPrice = Number(under?.price);
 
+    // Over línea oficial
     if (!Number.isNaN(overPoint) && !Number.isNaN(overPrice) && overPrice >= 1.5 && projectedTotal >= overPoint + 6) {
       return {
-        type: "total",
-        bookmakerKey: bookmaker.key,
-        bookmakerTitle: bookmaker.title,
-        side: "Over",
-        line: overPoint,
-        label: `Más de ${overPoint}`,
-        odds: overPrice,
-        impliedProbability: impliedProbabilityFromDecimal(overPrice)
+        type: "total", side: "Over",
+        bookmakerKey: bookmaker.key, bookmakerTitle: bookmaker.title,
+        line: overPoint, label: `Más de ${overPoint}`,
+        odds: overPrice, impliedProbability: impliedProbabilityFromDecimal(overPrice)
       };
     }
 
+    // Under línea oficial
     if (!Number.isNaN(underPoint) && !Number.isNaN(underPrice) && underPrice >= 1.5 && projectedTotal <= underPoint - 6) {
       return {
-        type: "total",
-        bookmakerKey: bookmaker.key,
-        bookmakerTitle: bookmaker.title,
-        side: "Under",
-        line: underPoint,
-        label: `Menos de ${underPoint}`,
-        odds: underPrice,
-        impliedProbability: impliedProbabilityFromDecimal(underPrice)
+        type: "total", side: "Under",
+        bookmakerKey: bookmaker.key, bookmakerTitle: bookmaker.title,
+        line: underPoint, label: `Menos de ${underPoint}`,
+        odds: underPrice, impliedProbability: impliedProbabilityFromDecimal(underPrice)
       };
+    }
+
+    // Líneas alternativas de over si el buffer de 6 no alcanza
+    if (allowAltLines && !Number.isNaN(overPoint) && !Number.isNaN(overPrice)) {
+      const step = 0.5;
+      let altLine = overPoint - step;
+      while (altLine >= overPoint - 12) {
+        const diffFromOfficial = overPoint - altLine;
+        const estimatedPrice = Math.min(2.10, overPrice + diffFromOfficial * 0.04);
+        if (estimatedPrice >= 1.5 && projectedTotal >= altLine + 4) {
+          return {
+            type: "total", side: "Over",
+            bookmakerKey: bookmaker.key, bookmakerTitle: bookmaker.title,
+            line: altLine, label: `Más de ${altLine} (alt.)`,
+            odds: parseFloat(estimatedPrice.toFixed(2)),
+            impliedProbability: impliedProbabilityFromDecimal(estimatedPrice),
+            isAltLine: true
+          };
+        }
+        altLine = parseFloat((altLine - step).toFixed(1));
+      }
     }
   }
 
@@ -1119,44 +1134,106 @@ function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, home
     return makeNoBet("No se encontraron cuotas disponibles para este partido.");
   }
 
-  const edgeGap = Math.abs(awayEdge - homeEdge);
+  const edgeGap       = Math.abs(awayEdge - homeEdge);
   const sideThreshold = 2;
-  const totalOnlyThreshold = 1;
+  const totalThreshold = 1;
 
-  if (awayEdge >= homeEdge + sideThreshold) {
-  const estimatedMargin = (awayEdge - homeEdge) * 1.5;
-  const selection = selectSideRecommendation(oddsEvent.bookmakers, awayName, estimatedMargin);
-  if (!selection) return makeNoBet(`La lectura favorece a ${awayName}, pero no apareció una ML o spread jugable desde cuota 1.50.`);
-  return {
-    selection,
-    strength: classifyBetStrength(edgeGap, selection.odds),
-    reason: `${awayName} es el lado que respalda la lectura estadística del matchup.`
-  };
-}
+  // ── CASO 1: Favorito claro ────────────────────────────────────────────────
+  if (awayEdge >= homeEdge + sideThreshold || homeEdge >= awayEdge + sideThreshold) {
+    const favoriteName    = awayEdge >= homeEdge + sideThreshold ? awayName  : homeName;
+    const underdogName    = awayEdge >= homeEdge + sideThreshold ? homeName  : awayName;
+    const edgeDiff        = Math.abs(awayEdge - homeEdge);
+    const estimatedMargin = edgeDiff * 1.5;
 
-if (homeEdge >= awayEdge + sideThreshold) {
-  const estimatedMargin = (homeEdge - awayEdge) * 1.5;
-  const selection = selectSideRecommendation(oddsEvent.bookmakers, homeName, estimatedMargin);
-  if (!selection) return makeNoBet(`La lectura favorece a ${homeName}, pero no apareció una ML o spread jugable desde cuota 1.50.`);
-  return {
-    selection,
-    strength: classifyBetStrength(edgeGap, selection.odds),
-    reason: `${homeName} es el lado que respalda la lectura estadística del matchup.`
-  };
-}
+    // ML favorito >= 1.50 → pick directo
+    const favoriteML = sortBookmakersByPriority(oddsEvent.bookmakers).reduce((found, bm) => {
+      if (found) return found;
+      const h2h = bm?.markets?.find(m => m?.key === "h2h");
+      const out = findOutcomeByTeamName(h2h?.outcomes || [], favoriteName);
+      const price = Number(out?.price);
+      return out && price >= 1.5 ? { price, bookmakerKey: bm.key, bookmakerTitle: bm.title } : null;
+    }, null);
 
-  if (edgeGap <= totalOnlyThreshold) {
-    const selection = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
-    if (!selection) return makeNoBet("Matchup equilibrado y sin total con valor suficiente desde cuota 1.50.");
+    if (favoriteML) {
+      const selection = {
+        type: "moneyline",
+        bookmakerKey: favoriteML.bookmakerKey, bookmakerTitle: favoriteML.bookmakerTitle,
+        side: favoriteName,
+        label: `${favoriteName} gana`,
+        odds: favoriteML.price,
+        impliedProbability: impliedProbabilityFromDecimal(favoriteML.price)
+      };
+      return {
+        selection,
+        strength: classifyBetStrength(edgeGap, selection.odds),
+        reason: `${favoriteName} tiene ventaja estadística clara. ML con cuota jugable.`
+      };
+    }
+
+    // ML < 1.50 → spread oficial o alternativo del favorito
+    const spreadSelection = selectSideRecommendation(oddsEvent.bookmakers, favoriteName, estimatedMargin);
+    if (spreadSelection) {
+      const altNote = spreadSelection.isAltLine ? " Línea alternativa más conservadora dado el precio del ML." : "";
+      return {
+        selection: spreadSelection,
+        strength: classifyBetStrength(edgeGap, spreadSelection.odds),
+        reason: `${favoriteName} es favorito claro pero su ML está por debajo de 1.50. Spread con valor.${altNote}`
+      };
+    }
+
+    // Spread positivo del underdog
+    const underdogSpread = selectSideRecommendation(oddsEvent.bookmakers, underdogName, -estimatedMargin);
+    if (underdogSpread && underdogSpread.line > 0) {
+      return {
+        selection: underdogSpread,
+        strength: classifyBetStrength(edgeGap, underdogSpread.odds),
+        reason: `El favorito no ofrece cuota jugable. ${underdogName} con spread positivo puede tener valor.`
+      };
+    }
+
+    // Fallback a total
+    const totalSelection = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal, true);
+    if (totalSelection) {
+      return {
+        selection: totalSelection,
+        strength: classifyBetStrength(2, totalSelection.odds),
+        reason: `Sin spread con valor en lados. Total proyectado respalda el ritmo de anotación.`
+      };
+    }
+
+    return makeNoBet(`${favoriteName} domina estadísticamente pero ninguna cuota ofrece valor ≥ 1.50.`);
+  }
+
+  // ── CASO 2: Partido equilibrado → busca valor en totals ──────────────────
+  if (edgeGap <= totalThreshold) {
+    const totalSelection = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal, true);
+    if (totalSelection) {
+      return {
+        selection: totalSelection,
+        strength: classifyBetStrength(2, totalSelection.odds),
+        reason: "Matchup equilibrado. El valor aparece en el total según el ritmo de anotación proyectado."
+      };
+    }
+    return makeNoBet("Matchup equilibrado y el total proyectado no supera la línea con margen suficiente.");
+  }
+
+  // ── CASO 3: Edge intermedio → intenta total como ángulo secundario ────────
+  const totalFallback = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal, false);
+  if (totalFallback) {
     return {
-      selection,
-      strength: classifyBetStrength(2, selection.odds),
-      reason: "Como el lado está equilibrado, el mejor ángulo aparece en el total."
+      selection: totalFallback,
+      strength: classifyBetStrength(2, totalFallback.odds),
+      reason: "Lectura intermedia en lados. El total proyectado muestra valor en este mercado."
     };
   }
 
-  return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadísticas.");
+  return makeNoBet("La lectura es intermedia y ningún mercado ofrece un ángulo claro con valor suficiente.");
 }
+
+// ─── SCOREBOARD & GAME CARDS ─────────────────────────────────────────────────
+
+let leagueProfilesCache = null;
+let scoreboardCache = [];
 
 function getLocalScoreboardDate(offsetDays = 0) {
   const now = new Date();
