@@ -482,59 +482,124 @@ async function fetchTeamSeasonStats(teamId) {
   return null;
 }
 
-function extractTeamProfile(statsData) {
-  const categories =
-    statsData?.results?.stats?.categories ||
-    statsData?.statistics?.splits?.categories ||
-    statsData?.splits?.categories ||
-    [];
+function normalizeStatLabel(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
 
-  const allStats = categories.flatMap(cat => cat?.stats || []);
+function collectAllTeamStats(statsData) {
+  const raw = [];
 
-  function pick(names) {
-    for (const name of names) {
-      const target = String(name).toLowerCase();
+  const categoryGroups = [
+    ...(statsData?.results?.stats?.categories || []),
+    ...(statsData?.statistics?.splits?.categories || []),
+    ...(statsData?.splits?.categories || [])
+  ];
 
-      const found = allStats.find(stat => {
-        const statName = String(stat?.name || "").toLowerCase();
-        const statDisplay = String(stat?.displayName || "").toLowerCase();
-        const statShort = String(stat?.shortDisplayName || "").toLowerCase();
-        const statAbbr = String(stat?.abbreviation || "").toLowerCase();
-
-        return (
-          statName === target ||
-          statDisplay === target ||
-          statShort === target ||
-          statAbbr === target
-        );
-      });
-
-      if (found) {
-        return found.displayValue ?? found.value ?? null;
-      }
+  for (const category of categoryGroups) {
+    if (Array.isArray(category?.stats)) {
+      raw.push(...category.stats);
     }
-    return null;
   }
 
+  const directArrays = [
+    ...(Array.isArray(statsData?.results?.stats) ? statsData.results.stats : []),
+    ...(Array.isArray(statsData?.statistics?.splits?.stats) ? statsData.statistics.splits.stats : []),
+    ...(Array.isArray(statsData?.splits?.stats) ? statsData.splits.stats : [])
+  ];
+
+  raw.push(...directArrays);
+
+  return raw.filter(Boolean);
+}
+
+function findStatValue(allStats, aliases, containsAliases = []) {
+  if (!Array.isArray(allStats) || !allStats.length) return null;
+
+  const normalizedAliases = aliases.map(normalizeStatLabel);
+  const normalizedContains = containsAliases.map(normalizeStatLabel);
+
+  for (const stat of allStats) {
+    const candidates = [
+      stat?.name,
+      stat?.displayName,
+      stat?.shortDisplayName,
+      stat?.abbreviation,
+      stat?.description
+    ].map(normalizeStatLabel).filter(Boolean);
+
+    const exactMatch = candidates.some(candidate => normalizedAliases.includes(candidate));
+    if (exactMatch) {
+      return stat?.displayValue ?? stat?.value ?? null;
+    }
+  }
+
+  for (const stat of allStats) {
+    const candidates = [
+      stat?.name,
+      stat?.displayName,
+      stat?.shortDisplayName,
+      stat?.abbreviation,
+      stat?.description
+    ].map(normalizeStatLabel).filter(Boolean);
+
+    const partialMatch = candidates.some(candidate =>
+      normalizedContains.some(alias => candidate.includes(alias))
+    );
+
+    if (partialMatch) {
+      return stat?.displayValue ?? stat?.value ?? null;
+    }
+  }
+
+  return null;
+}
+
+function extractTeamProfile(statsData) {
+  const allStats = collectAllTeamStats(statsData);
+
   const ppg = toNumber(
-    pick([
-      "pointspergame",
-      "avgpoints",
-      "points",
-      "ppg"
-    ])
+    findStatValue(
+      allStats,
+      [
+        "pointspergame",
+        "points per game",
+        "avgpoints",
+        "avg points",
+        "ppg"
+      ],
+      [
+        "points per game",
+        "avg points",
+        "ppg"
+      ]
+    )
   );
 
   const oppPpg = toNumber(
-    pick([
-      "pointsallowedpergame",
-      "avgpointsallowed",
-      "opppointspergame",
-      "opponent points per game",
-      "points allowed per game",
-      "opp ppg",
-      "papg"
-    ])
+    findStatValue(
+      allStats,
+      [
+        "pointsallowedpergame",
+        "points allowed per game",
+        "opppointspergame",
+        "opp points per game",
+        "avgpointsallowed",
+        "papg",
+        "points allowed"
+      ],
+      [
+        "points allowed per game",
+        "opp points per game",
+        "points allowed",
+        "avg points allowed",
+        "opponent points"
+      ]
+    )
   );
 
   return { ppg, oppPpg };
@@ -549,8 +614,8 @@ function getRankFromValue(value, values, higherBetter = true) {
 
   if (!cleaned.length) return null;
 
-  const uniqueSorted = [...new Set(cleaned)].sort((a, b) => (higherBetter ? b - a : a - b));
-  const index = uniqueSorted.findIndex(v => v === Number(value));
+  const sorted = [...cleaned].sort((a, b) => (higherBetter ? b - a : a - b));
+  const index = sorted.findIndex(v => Number(v) === Number(value));
 
   return index >= 0 ? index + 1 : null;
 }
@@ -570,15 +635,16 @@ function rankTierLabel(rank, totalTeams = 30) {
 function buildLeagueProfilesMap(teamProfiles) {
   const validProfiles = teamProfiles.filter(team =>
     team?.profile &&
-    (team.profile.ppg !== null || team.profile.oppPpg !== null)
+    team.profile.ppg !== null &&
+    team.profile.oppPpg !== null
   );
 
   const offenseValues = validProfiles
-    .map(team => team.profile?.ppg ?? null)
+    .map(team => team.profile.ppg)
     .filter(v => v !== null && !Number.isNaN(v));
 
   const defenseValues = validProfiles
-    .map(team => team.profile?.oppPpg ?? null)
+    .map(team => team.profile.oppPpg)
     .filter(v => v !== null && !Number.isNaN(v));
 
   const totalOffenseTeams = offenseValues.length || 30;
@@ -590,10 +656,16 @@ function buildLeagueProfilesMap(teamProfiles) {
     const offenseRank = getRankFromValue(team.profile?.ppg ?? null, offenseValues, true);
     const defenseRank = getRankFromValue(team.profile?.oppPpg ?? null, defenseValues, false);
 
+    let offenseLabel = rankTierLabel(offenseRank, totalOffenseTeams);
+    let defenseLabel = rankTierLabel(defenseRank, totalDefenseTeams);
+
+    if (team.profile?.ppg === null) offenseLabel = "media";
+    if (team.profile?.oppPpg === null) defenseLabel = "media";
+
     result[String(team.teamId)] = {
       offenseRank,
       defenseRank,
-      label: `Ataque ${rankTierLabel(offenseRank, totalOffenseTeams)} | Defensa ${rankTierLabel(defenseRank, totalDefenseTeams)}`
+      label: `Ataque ${offenseLabel} | Defensa ${defenseLabel}`
     };
   }
 
