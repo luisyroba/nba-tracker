@@ -209,10 +209,9 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize = 5) {
 
 function getB2BStatus(data, teamId, gameDate) {
   const events = normalizeGamesFromSchedule(data);
-  const targetDateKey = getGameCalendarKey(gameDate);
-  const previousDateKey = getPreviousCalendarKey(gameDate);
+  const targetTime = gameDate ? new Date(gameDate).getTime() : null;
 
-  if (!targetDateKey || !previousDateKey) {
+  if (!targetTime) {
     return {
       isB2B: false,
       label: "No",
@@ -220,14 +219,17 @@ function getB2BStatus(data, teamId, gameDate) {
     };
   }
 
-  const completedGames = events
+  const previousGames = events
     .map(event => getTeamGameInfo(event, teamId))
     .filter(Boolean)
-    .filter(game => game.completed);
+    .filter(game => game.completed)
+    .filter(game => game.date)
+    .filter(game => new Date(game.date).getTime() < targetTime)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const previousDayGame = completedGames.find(game => game.dateKey === previousDateKey);
+  const previousGame = previousGames[0];
 
-  if (!previousDayGame) {
+  if (!previousGame) {
     return {
       isB2B: false,
       label: "No",
@@ -235,31 +237,51 @@ function getB2BStatus(data, teamId, gameDate) {
     };
   }
 
-  if (previousDayGame.homeAway === "home") {
+  const previousTime = new Date(previousGame.date).getTime();
+  const diffHours = (targetTime - previousTime) / (1000 * 60 * 60);
+
+  if (diffHours > 48) {
     return {
-      isB2B: true,
-      label: "Sí",
-      detail: "B2B en casa"
+      isB2B: false,
+      label: "No",
+      detail: "Descanso normal"
     };
   }
 
-  if (previousDayGame.homeAway === "away") {
+  if (diffHours <= 30) {
+    if (previousGame.homeAway === "home") {
+      return {
+        isB2B: true,
+        label: "Sí",
+        detail: "B2B en casa"
+      };
+    }
+
+    if (previousGame.homeAway === "away") {
+      return {
+        isB2B: true,
+        label: "Sí",
+        detail: "B2B con viaje"
+      };
+    }
+
     return {
       isB2B: true,
       label: "Sí",
-      detail: "B2B con viaje"
+      detail: "B2B"
     };
   }
 
   return {
-    isB2B: true,
-    label: "Sí",
-    detail: "B2B"
+    isB2B: false,
+    label: "No",
+    detail: "Descanso normal"
   };
 }
-
 function renderFormChips(games) {
-  if (!games?.length) return `<div class="form-chips empty">Sin datos</div>`;
+  if (!games?.length) {
+    return `<div class="form-chips empty"><span class="form-empty">Sin datos</span></div>`;
+  }
 
   const ordered = [...games].reverse();
 
