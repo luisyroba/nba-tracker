@@ -1536,12 +1536,12 @@ async function loadNBAGames() {
     scoreboardCache = events;
 
     if (!events.length) {
-      statusEl.textContent = "No se encontraron partidos NBA";
+     if (statusEl) statusEl.textContent = "No se encontraron partidos NBA";
       gamesContainer.innerHTML = "<p>No hay juegos disponibles.</p>";
       return;
     }
 
-    statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
+   if (statusEl) statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
     gamesContainer.innerHTML = "";
 
     for (const event of events) {
