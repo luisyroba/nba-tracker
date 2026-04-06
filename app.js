@@ -6,13 +6,15 @@ const modal = document.getElementById("game-modal");
 const modalCloseBtn = document.getElementById("modal-close");
 const modalCloseBg = document.getElementById("modal-close-bg");
 
-const ODDS_API_KEY = "8a61d585e42c3c2ae6cd592a78c41019";
+const ODDS_API_KEY = "987635aba320e6bdebcf265db26707ae";
 const ODDS_API_SPORT = "basketball_nba";
 const ODDS_API_REGIONS = "eu,uk,us";
 const ODDS_API_MARKETS = "h2h,spreads,totals";
-const BOOKMAKER_PRIORITY = ["betano", "novibet", "bet365", "bet365_uk"];
+const BOOKMAKER_PRIORITY = ["betano", "novibet", "bet365", "1xbet"];
 
 let leagueProfilesCache = null;
+let oddsCache = null;
+let oddsCacheTime = 0;
 let scoreboardCache = [];
 
 function openModal() {
@@ -784,10 +786,83 @@ function getBookmakerDisplayName(key, title) {
 }
 
 async function fetchOddsApiEvents() {
-  const url = `https://api.the-odds-api.com/v4/sports/${ODDS_API_SPORT}/odds?apiKey=${encodeURIComponent(ODDS_API_KEY)}&regions=${encodeURIComponent(ODDS_API_REGIONS)}&markets=${encodeURIComponent(ODDS_API_MARKETS)}&oddsFormat=decimal&dateFormat=iso`;
+  const now = Date.now();
+  const TTL = 1000 * 60 * 60; // caché 60 minutos
+  if (oddsCache && now - oddsCacheTime < TTL) return oddsCache;
+
+  const url = `https://api.sportsgameodds.com/v2/events?leagueID=NBA&oddsAvailable=true&oddID=points-home-game-ml-home,points-away-game-ml-away,points-home-game-sp-home,points-away-game-sp-away,points-all-game-ou-over,points-all-game-ou-under&includeOpposingOdds=false&apiKey=${ODDS_API_KEY}`;
+
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Odds API HTTP ${res.status}`);
-  return res.json();
+  if (!res.ok) throw new Error(`SportsGameOdds HTTP ${res.status}`);
+  const json = await res.json();
+
+  if (!json?.success || !Array.isArray(json?.data)) return [];
+
+  // Normalizamos al formato que ya espera tu app (igual que The Odds API)
+  oddsCache = json.data.map(ev => {
+    const homeTeam = ev.homeTeam?.names?.long || ev.homeTeam?.name || ev.homeTeamID || "";
+    const awayTeam = ev.awayTeam?.names?.long || ev.awayTeam?.name || ev.awayTeamID || "";
+    const odds = ev.odds || {};
+
+    const bookmakerMap = {};
+
+    function addOddToBookmaker(oddID, marketKey, outcomeName, pointField) {
+      const oddData = odds[oddID];
+      if (!oddData?.byBookmaker) return;
+      for (const [bmKey, bmData] of Object.entries(oddData.byBookmaker)) {
+        if (!bmData?.available) continue;
+        const rawOdds = Number(bmData.odds);
+        if (!rawOdds || Number.isNaN(rawOdds)) continue;
+
+        // Convertir American a decimal si es necesario
+        let decimalOdds;
+        if (rawOdds > 0) {
+          decimalOdds = rawOdds / 100 + 1;
+        } else if (rawOdds < 0) {
+          decimalOdds = 100 / Math.abs(rawOdds) + 1;
+        } else {
+          continue;
+        }
+
+        if (!bookmakerMap[bmKey]) {
+          bookmakerMap[bmKey] = { key: bmKey.toLowerCase(), title: bmKey, markets: {} };
+        }
+        if (!bookmakerMap[bmKey].markets[marketKey]) {
+          bookmakerMap[bmKey].markets[marketKey] = { key: marketKey, outcomes: [] };
+        }
+
+        const outcome = { name: outcomeName, price: decimalOdds };
+        const point = bmData[pointField] ?? oddData[pointField] ?? null;
+        if (point !== null && point !== undefined) outcome.point = Number(point);
+
+        bookmakerMap[bmKey].markets[marketKey].outcomes.push(outcome);
+      }
+    }
+
+    addOddToBookmaker("points-home-game-ml-home", "h2h", homeTeam, null);
+    addOddToBookmaker("points-away-game-ml-away", "h2h", awayTeam, null);
+    addOddToBookmaker("points-home-game-sp-home", "spreads", homeTeam, "spread");
+    addOddToBookmaker("points-away-game-sp-away", "spreads", awayTeam, "spread");
+    addOddToBookmaker("points-all-game-ou-over",  "totals", "over",    "overUnder");
+    addOddToBookmaker("points-all-game-ou-under", "totals", "under",   "overUnder");
+
+    const bookmakers = Object.values(bookmakerMap).map(bm => ({
+      key: bm.key,
+      title: bm.title,
+      markets: Object.values(bm.markets)
+    }));
+
+    return {
+      id: ev.eventID,
+      home_team: homeTeam,
+      away_team: awayTeam,
+      commence_time: ev.startTime,
+      bookmakers
+    };
+  });
+
+  oddsCacheTime = now;
+  return oddsCache;
 }
 
 function buildOddsApiEventMatchScore(oddsEvent, homeName, awayName, commenceTime = null) {
