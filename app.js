@@ -352,6 +352,53 @@ function getContextFromConferencePosition(position, clincher = null) {
   return "Fuera de postemporada";
 }
 
+function extractSeedFromStats(entry, fallbackIndex) {
+  const stats = entry?.stats || [];
+
+  const preferredNames = [
+    "playoffSeed",
+    "seed",
+    "rank",
+    "standing",
+    "conferenceRank",
+    "conferenceSeed",
+    "clinchrank"
+  ];
+
+  for (const preferred of preferredNames) {
+    const stat = stats.find(s => String(s?.name || "").toLowerCase() === preferred.toLowerCase());
+    if (!stat) continue;
+
+    const raw = stat.displayValue ?? stat.value ?? "";
+    const num = Number(String(raw).replace(/[^\d.-]/g, ""));
+    if (!Number.isNaN(num) && num > 0) {
+      return num;
+    }
+  }
+
+  for (const stat of stats) {
+    const name = String(stat?.name || "").toLowerCase();
+    const description = String(stat?.description || "").toLowerCase();
+    const raw = stat?.displayValue ?? stat?.value ?? "";
+
+    if (
+      name.includes("rank") ||
+      name.includes("seed") ||
+      name.includes("standing") ||
+      description.includes("rank") ||
+      description.includes("seed") ||
+      description.includes("standing")
+    ) {
+      const num = Number(String(raw).replace(/[^\d.-]/g, ""));
+      if (!Number.isNaN(num) && num > 0) {
+        return num;
+      }
+    }
+  }
+
+  return fallbackIndex + 1;
+}
+
 function buildStandingsLookup(standingsData) {
   const groups = standingsData?.children || [];
 
@@ -376,6 +423,7 @@ function buildStandingsLookup(standingsData) {
 
       const combinedText = `${statsText} ${noteText} ${abbr} ${name}`;
       const clincher = detectClincherFromText(combinedText);
+      const conferencePosition = extractSeedFromStats(entry, index);
 
       return {
         rawEntry: entry,
@@ -383,7 +431,7 @@ function buildStandingsLookup(standingsData) {
         abbr,
         name,
         conference: getConferenceLabel(group?.name || "NBA"),
-        conferencePosition: index + 1,
+        conferencePosition,
         record,
         clincher
       };
