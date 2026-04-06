@@ -51,7 +51,6 @@ function parseRecord(recordText) {
 
 function getStatValue(entry, statNames) {
   if (!entry?.stats) return "Pendiente";
-
   const names = Array.isArray(statNames) ? statNames : [statNames];
 
   for (const name of names) {
@@ -122,29 +121,6 @@ function getTeamIdFromCompetitor(competitor) {
 function normalizeGamesFromSchedule(data) {
   if (Array.isArray(data?.events)) return data.events;
   return [];
-}
-
-function getContextFromConferencePosition(position, clincher = null) {
-  if (clincher) return clincher;
-
-  if (position === null || position === undefined || position === "-") return "Pendiente";
-
-  const pos = Number(position);
-  if (Number.isNaN(pos)) return "Pendiente";
-
-  if (pos >= 1 && pos <= 6) return "Zona de playoffs";
-  if (pos >= 7 && pos <= 10) return "Zona de play-in";
-  return "Fuera de postemporada";
-}
-
-function getClincherStatusFromEntry(entry) {
-  const raw = `${entry?.team?.shortDisplayName || ""} ${entry?.team?.displayName || ""} ${entry?.note || ""}`.toLowerCase();
-
-  if (raw.includes("eliminated") || raw.includes("e --")) return "Eliminado";
-  if (raw.includes("clinched play-in") || raw.includes("pb --")) return "Play-in asegurado";
-  if (raw.includes("clinched playoff") || raw.includes("x --") || raw.includes("y --")) return "Clasificado a playoffs";
-
-  return null;
 }
 
 function getOpponentStrengthLabel(pct) {
@@ -250,9 +226,7 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standings
         opponentPct,
         opponentWeight,
         rawDiff: game.teamScore - game.opponentScore,
-        weightedDiff: (game.teamScore - game.opponentScore) * opponentWeight,
-        weightedScored: game.teamScore * opponentWeight,
-        weightedAllowed: game.opponentScore * opponentWeight
+        weightedDiff: (game.teamScore - game.opponentScore) * opponentWeight
       };
     });
 
@@ -282,11 +256,7 @@ function getB2BStatus(data, teamId, gameDate) {
   const targetTime = gameDate ? new Date(gameDate).getTime() : null;
 
   if (!targetTime) {
-    return {
-      isB2B: false,
-      label: "No",
-      detail: "Sin dato"
-    };
+    return { isB2B: false, label: "No", detail: "Sin dato" };
   }
 
   const previousGames = events
@@ -300,53 +270,29 @@ function getB2BStatus(data, teamId, gameDate) {
   const previousGame = previousGames[0];
 
   if (!previousGame) {
-    return {
-      isB2B: false,
-      label: "No",
-      detail: "Descanso normal"
-    };
+    return { isB2B: false, label: "No", detail: "Descanso normal" };
   }
 
   const previousTime = new Date(previousGame.date).getTime();
   const diffHours = (targetTime - previousTime) / (1000 * 60 * 60);
 
   if (diffHours > 48) {
-    return {
-      isB2B: false,
-      label: "No",
-      detail: "Descanso normal"
-    };
+    return { isB2B: false, label: "No", detail: "Descanso normal" };
   }
 
   if (diffHours <= 30) {
     if (previousGame.homeAway === "home") {
-      return {
-        isB2B: true,
-        label: "Sí",
-        detail: "B2B en casa"
-      };
+      return { isB2B: true, label: "Sí", detail: "B2B en casa" };
     }
 
     if (previousGame.homeAway === "away") {
-      return {
-        isB2B: true,
-        label: "Sí",
-        detail: "B2B con viaje"
-      };
+      return { isB2B: true, label: "Sí", detail: "B2B con viaje" };
     }
 
-    return {
-      isB2B: true,
-      label: "Sí",
-      detail: "B2B"
-    };
+    return { isB2B: true, label: "Sí", detail: "B2B" };
   }
 
-  return {
-    isB2B: false,
-    label: "No",
-    detail: "Descanso normal"
-  };
+  return { isB2B: false, label: "No", detail: "Descanso normal" };
 }
 
 async function fetchTeamSchedule(teamId) {
@@ -371,6 +317,41 @@ async function fetchTeamSchedule(teamId) {
   return null;
 }
 
+function detectClincherFromText(text) {
+  const t = String(text || "").toLowerCase();
+
+  if (
+    t.includes("eliminated") ||
+    t.includes("e --")
+  ) return "Eliminado";
+
+  if (
+    t.includes("clinched play-in") ||
+    t.includes("pb --")
+  ) return "Play-in asegurado";
+
+  if (
+    t.includes("clinched playoff") ||
+    t.includes("clinched playoff berth") ||
+    t.includes("x --") ||
+    t.includes("y --") ||
+    t.includes("z --")
+  ) return "Clasificado a playoffs";
+
+  return null;
+}
+
+function getContextFromConferencePosition(position, clincher = null) {
+  if (clincher) return clincher;
+
+  const pos = Number(position);
+  if (Number.isNaN(pos)) return "Pendiente";
+
+  if (pos >= 1 && pos <= 6) return "Zona de playoffs";
+  if (pos >= 7 && pos <= 10) return "Zona de play-in";
+  return "Fuera de postemporada";
+}
+
 function buildStandingsLookup(standingsData) {
   const groups = standingsData?.children || [];
 
@@ -380,43 +361,27 @@ function buildStandingsLookup(standingsData) {
     return standingsEntries.map((entry, index) => {
       const team = entry?.team || {};
       const record = getStatValue(entry, ["overall", "wins"]);
+      const teamId = String(team?.id || "");
+      const abbr = team?.abbreviation || "";
+      const name = team?.displayName || "";
 
       const statsText = (entry?.stats || [])
         .map(stat => `${stat?.name || ""} ${stat?.displayValue || ""} ${stat?.description || ""}`)
-        .join(" ")
-        .toLowerCase();
+        .join(" ");
 
-      const noteText = `${entry?.note || ""}`.toLowerCase();
-      const teamText = `${team?.displayName || ""} ${team?.abbreviation || ""}`.toLowerCase();
-      const combinedText = `${statsText} ${noteText} ${teamText}`;
+      const noteText =
+        typeof entry?.note === "string"
+          ? entry.note
+          : JSON.stringify(entry?.note || "");
 
-let clincher = null;
-
-if (
-  combinedText.includes("eliminated") ||
-  combinedText.includes("e --")
-) {
-  clincher = "Eliminado";
-} else if (
-  combinedText.includes("clinched play-in") ||
-  combinedText.includes("pb --")
-) {
-  clincher = "Play-in asegurado";
-} else if (
-  combinedText.includes("clinched playoff") ||
-  combinedText.includes("clinched playoff berth") ||
-  combinedText.includes("x --") ||
-  combinedText.includes("y --") ||
-  combinedText.includes("z --")
-) {
-  clincher = "Clasificado a play-offs";
-}
+      const combinedText = `${statsText} ${noteText} ${abbr} ${name}`;
+      const clincher = detectClincherFromText(combinedText);
 
       return {
         rawEntry: entry,
-        teamId: String(team?.id || ""),
-        abbr: team?.abbreviation || "",
-        name: team?.displayName || "",
+        teamId,
+        abbr,
+        name,
         conference: getConferenceLabel(group?.name || "NBA"),
         conferencePosition: index + 1,
         record,
@@ -448,8 +413,8 @@ function formatStatusText(status) {
   return status || "Sin estado";
 }
 
-function formatGameDate(dateString) {
-  if (!dateString) return "Sin fecha";
+function formatGameTime(dateString) {
+  if (!dateString) return "Sin hora";
   const date = new Date(dateString);
   const hh = String(date.getHours()).padStart(2, "0");
   const mm = String(date.getMinutes()).padStart(2, "0");
@@ -503,21 +468,24 @@ async function loadNBAGames() {
           ? awayScoreRaw?.displayValue ?? "-"
           : awayScoreRaw;
 
-      const gameStatusRaw = event.status?.type?.description || "Sin estado";
-      const gameStatus = formatStatusText(gameStatusRaw);
+      const rawStatus = event.status?.type?.description || "Sin estado";
+      const gameStatus = formatStatusText(rawStatus);
       const period = event.status?.period || null;
       const clock = event.status?.displayClock || "";
       const statusState = event.status?.type?.state || "";
 
-      const isFinal = statusState === "post" || gameStatus.toLowerCase().includes("finalizado");
-      const isLive = statusState === "in" || gameStatus.toLowerCase().includes("progreso");
+      const isFinal = statusState === "post" || gameStatus === "Finalizado";
+      const isLive = statusState === "in" || gameStatus === "En progreso";
       const isScheduled = !isFinal && !isLive;
 
-      const liveBadge = isFinal
-        ? "Finalizado"
-        : isLive
-          ? `En progreso · Q${period || "-"} · ${clock || ""}`.trim()
-          : `Programado · ${formatGameDate(event.date)}`;
+      let badgeText = "Programado";
+      if (isFinal) {
+        badgeText = "Finalizado";
+      } else if (isLive) {
+        badgeText = `En progreso · Q${period || "-"} · ${clock || ""}`.trim();
+      } else {
+        badgeText = `Programado · ${formatGameTime(event.date)}`;
+      }
 
       const card = document.createElement("article");
       card.className = "game-card";
@@ -525,7 +493,7 @@ async function loadNBAGames() {
       card.innerHTML = `
         <div class="game-top">
           <span class="game-status">${escapeHtml(gameStatus)}</span>
-          <span class="game-date">${escapeHtml(formatGameDate(event.date))}</span>
+          <span class="game-date">${escapeHtml(formatGameTime(event.date))}</span>
         </div>
 
         <div class="teams">
@@ -541,7 +509,7 @@ async function loadNBAGames() {
         </div>
 
         <div class="live-extra ${isFinal ? "is-final" : isScheduled ? "is-scheduled" : ""}">
-          ${escapeHtml(liveBadge)}
+          ${escapeHtml(badgeText)}
         </div>
 
         <div class="game-actions">
@@ -632,15 +600,15 @@ async function analyzeGame(gameId) {
     const awayB2B = getB2BStatus(awaySchedule, awayTeamId, comp?.date);
     const homeB2B = getB2BStatus(homeSchedule, homeTeamId, comp?.date);
 
-const awayContext = getContextFromConferencePosition(
-  awayEntry?.conferencePosition,
-  awayEntry?.clincher || null
-);
+    const awayContext = getContextFromConferencePosition(
+      awayEntry?.conferencePosition,
+      awayEntry?.clincher || null
+    );
 
-const homeContext = getContextFromConferencePosition(
-  homeEntry?.conferencePosition,
-  homeEntry?.clincher || null
-);
+    const homeContext = getContextFromConferencePosition(
+      homeEntry?.conferencePosition,
+      homeEntry?.clincher || null
+    );
 
     const awayStats = {
       conference: awayEntry?.conference || "Pendiente",
@@ -650,7 +618,6 @@ const homeContext = getContextFromConferencePosition(
       recentFormHtml: renderFormChips(awayRecent5.games),
       pointsScoredRecent: formatOneDecimal(awayRecent5.scoredAvg),
       pointsAllowedRecent: formatOneDecimal(awayRecent5.allowedAvg),
-      diffRecent: formatSignedOneDecimal(awayRecent5.diffAvg),
       adjustedDiffRecent: formatSignedOneDecimal(awayRecent5.adjustedDiffAvg),
       rivalQuality: getOpponentStrengthLabel(awayRecent5.opponentPctAvg),
       b2b: `${awayB2B.label} · ${awayB2B.detail}`
@@ -664,7 +631,6 @@ const homeContext = getContextFromConferencePosition(
       recentFormHtml: renderFormChips(homeRecent5.games),
       pointsScoredRecent: formatOneDecimal(homeRecent5.scoredAvg),
       pointsAllowedRecent: formatOneDecimal(homeRecent5.allowedAvg),
-      diffRecent: formatSignedOneDecimal(homeRecent5.diffAvg),
       adjustedDiffRecent: formatSignedOneDecimal(homeRecent5.adjustedDiffAvg),
       rivalQuality: getOpponentStrengthLabel(homeRecent5.opponentPctAvg),
       b2b: `${homeB2B.label} · ${homeB2B.detail}`
@@ -693,8 +659,10 @@ const homeContext = getContextFromConferencePosition(
     if (awayEntry?.conferencePosition && homeEntry?.conferencePosition) {
       const awayPos = Number(awayEntry.conferencePosition);
       const homePos = Number(homeEntry.conferencePosition);
-      if (awayPos < homePos) awayEdge += 1;
-      if (homePos < awayPos) homeEdge += 1;
+      if (!Number.isNaN(awayPos) && !Number.isNaN(homePos)) {
+        if (awayPos < homePos) awayEdge += 1;
+        if (homePos < awayPos) homeEdge += 1;
+      }
     }
 
     if (awayAdjustedDiffNum !== null && homeAdjustedDiffNum !== null) {
@@ -732,7 +700,7 @@ const homeContext = getContextFromConferencePosition(
         autoNote = `${awayName} llega mejor, pero parte de su forma reciente fue ante rivales más débiles.`;
       }
       if (homeStrongScheduleRecent && awayEdge - homeEdge <= 2) {
-        autoNote = `${awayName} tiene números recientes favorables, aunque ${homeName} enfrentó rivales más fuertes últimamente.`;
+        autoNote = `${awayName} tiene números favorables, aunque ${homeName} enfrentó rivales más fuertes últimamente.`;
       }
     }
 
@@ -861,10 +829,8 @@ const homeContext = getContextFromConferencePosition(
 gamesContainer?.addEventListener("click", (e) => {
   const btn = e.target.closest(".analyze-btn");
   if (!btn) return;
-
   const gameId = btn.dataset.gameId;
   if (!gameId) return;
-
   analyzeGame(gameId);
 });
 
@@ -872,9 +838,7 @@ modalCloseBtn?.addEventListener("click", closeModal);
 modalCloseBg?.addEventListener("click", closeModal);
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    closeModal();
-  }
+  if (e.key === "Escape") closeModal();
 });
 
 loadNBAGames();
