@@ -10,12 +10,7 @@ const ODDS_API_KEY = "8a61d585e42c3c2ae6cd592a78c41019";
 const ODDS_API_SPORT = "basketball_nba";
 const ODDS_API_REGIONS = "eu,uk,us";
 const ODDS_API_MARKETS = "h2h,spreads,totals";
-const BOOKMAKER_PRIORITY = [
-  "betano",
-  "novibet",
-  "bet365",
-  "bet365_uk"
-];
+const BOOKMAKER_PRIORITY = ["betano", "novibet", "bet365", "bet365_uk"];
 
 let leagueProfilesCache = null;
 let scoreboardCache = [];
@@ -56,11 +51,7 @@ function parseRecord(recordText) {
   const wins = Number(parts[0]);
   const losses = Number(parts[1]);
   if (Number.isNaN(wins) || Number.isNaN(losses)) return null;
-  return {
-    wins,
-    losses,
-    pct: wins / (wins + losses)
-  };
+  return { wins, losses, pct: wins / (wins + losses) };
 }
 
 function getStatValue(entry, statNames) {
@@ -102,8 +93,7 @@ function formatOneDecimal(value) {
 
 function formatSignedOneDecimal(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return "Pendiente";
-  if (value > 0) return `+${value.toFixed(1)}`;
-  return value.toFixed(1);
+  return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
 }
 
 function formatOddsDecimal(value) {
@@ -140,22 +130,12 @@ function buildStatRow(awayValue, label, homeValue, awayClass = "", homeClass = "
   `;
 }
 
-function buildSingleColumnRow(label, value) {
-  return `
-    <div class="pregame-single-row">
-      <div class="metric">${escapeHtml(label)}</div>
-      <div class="single-value">${value}</div>
-    </div>
-  `;
-}
-
 function getTeamIdFromCompetitor(competitor) {
   return competitor?.team?.id || competitor?.id || null;
 }
 
 function normalizeGamesFromSchedule(data) {
-  if (Array.isArray(data?.events)) return data.events;
-  return [];
+  return Array.isArray(data?.events) ? data.events : [];
 }
 
 function getOpponentStrengthLabel(pct) {
@@ -339,12 +319,8 @@ function getB2BStatus(data, teamId, gameDate) {
   }
 
   if (diffHours <= 30) {
-    if (previousGame.homeAway === "home") {
-      return { isB2B: true, label: "Sí", detail: "B2B en casa" };
-    }
-    if (previousGame.homeAway === "away") {
-      return { isB2B: true, label: "Sí", detail: "B2B con viaje" };
-    }
+    if (previousGame.homeAway === "home") return { isB2B: true, label: "Sí", detail: "B2B en casa" };
+    if (previousGame.homeAway === "away") return { isB2B: true, label: "Sí", detail: "B2B con viaje" };
     return { isB2B: true, label: "Sí", detail: "B2B" };
   }
 
@@ -438,11 +414,7 @@ function buildStandingsLookup(standingsData) {
         .map(stat => `${stat?.name || ""} ${stat?.displayValue || ""} ${stat?.description || ""}`)
         .join(" ");
 
-      const noteText =
-        typeof entry?.note === "string"
-          ? entry.note
-          : JSON.stringify(entry?.note || "");
-
+      const noteText = typeof entry?.note === "string" ? entry.note : JSON.stringify(entry?.note || "");
       const combinedText = `${statsText} ${noteText} ${abbr} ${name}`;
       const clincher = detectClincherFromText(combinedText);
 
@@ -531,9 +503,7 @@ function collectAllTeamStats(statsData) {
   ];
 
   for (const category of categoryGroups) {
-    if (Array.isArray(category?.stats)) {
-      raw.push(...category.stats);
-    }
+    if (Array.isArray(category?.stats)) raw.push(...category.stats);
   }
 
   const directArrays = [
@@ -563,9 +533,7 @@ function findStatValue(allStats, aliases, containsAliases = []) {
     ].map(normalizeStatLabel).filter(Boolean);
 
     const exactMatch = candidates.some(candidate => normalizedAliases.includes(candidate));
-    if (exactMatch) {
-      return stat?.displayValue ?? stat?.value ?? null;
-    }
+    if (exactMatch) return stat?.displayValue ?? stat?.value ?? null;
   }
 
   for (const stat of allStats) {
@@ -581,9 +549,7 @@ function findStatValue(allStats, aliases, containsAliases = []) {
       normalizedContains.some(alias => candidate.includes(alias))
     );
 
-    if (partialMatch) {
-      return stat?.displayValue ?? stat?.value ?? null;
-    }
+    if (partialMatch) return stat?.displayValue ?? stat?.value ?? null;
   }
 
   return null;
@@ -599,7 +565,6 @@ function getSeasonAllowedAverageFromSchedule(scheduleData, teamId) {
     .filter(game => game.teamScore !== null && game.opponentScore !== null);
 
   if (!completedGames.length) return null;
-
   return average(completedGames.map(game => game.opponentScore));
 }
 
@@ -613,7 +578,6 @@ function getSeasonScoredAverageFromSchedule(scheduleData, teamId) {
     .filter(game => game.teamScore !== null && game.opponentScore !== null);
 
   if (!completedGames.length) return null;
-
   return average(completedGames.map(game => game.teamScore));
 }
 
@@ -623,18 +587,8 @@ function extractTeamProfile(statsData, fallbackScheduleData = null, teamId = nul
   let ppg = toNumber(
     findStatValue(
       allStats,
-      [
-        "pointspergame",
-        "points per game",
-        "avgpoints",
-        "avg points",
-        "ppg"
-      ],
-      [
-        "points per game",
-        "avg points",
-        "ppg"
-      ]
+      ["pointspergame", "points per game", "avgpoints", "avg points", "ppg"],
+      ["points per game", "avg points", "ppg"]
     )
   );
 
@@ -796,11 +750,7 @@ async function fetchGameSummary(gameId) {
 
 function buildFallbackSummaryFromScoreboardEvent(event) {
   if (!event) return null;
-  return {
-    header: {
-      competitions: event?.competitions || []
-    }
-  };
+  return { header: { competitions: event?.competitions || [] } };
 }
 
 function createEmptyStandingsLookup() {
@@ -822,33 +772,38 @@ function impliedProbabilityFromDecimal(decimalOdds) {
   return 1 / odds;
 }
 
-function getStakeLabelByStrength(strength) {
-  if (strength === "Fuerte") return "10% del bank";
-  if (strength === "Medio") return "7% del bank";
-  if (strength === "Leve") return "5% del bank";
-  return "0%";
-}
-
 function getBookmakerPriorityIndex(key) {
   const idx = BOOKMAKER_PRIORITY.indexOf(String(key || "").toLowerCase());
   return idx === -1 ? 999 : idx;
 }
 
-function findOutcomeByTeamName(outcomes, teamName) {
-  const target = normalizeString(teamName);
-  return (outcomes || []).find(outcome => normalizeString(outcome?.name) === target) || null;
+function getBookmakerDisplayName(key, title) {
+  const normalized = String(key || "").toLowerCase();
+  if (normalized === "bet365_uk") return "bet365";
+  return title || key || "Casa";
 }
 
-function buildOddsApiEventMatchScore(oddsEvent, homeName, awayName) {
+async function fetchOddsApiEvents() {
+  const url = `https://api.the-odds-api.com/v4/sports/${ODDS_API_SPORT}/odds?apiKey=${encodeURIComponent(ODDS_API_KEY)}&regions=${encodeURIComponent(ODDS_API_REGIONS)}&markets=${encodeURIComponent(ODDS_API_MARKETS)}&oddsFormat=decimal&dateFormat=iso`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Odds API HTTP ${res.status}`);
+  return res.json();
+}
+
+function buildOddsApiEventMatchScore(oddsEvent, homeName, awayName, commenceTime = null) {
   const oddsHome = normalizeString(oddsEvent?.home_team);
   const oddsAway = normalizeString(oddsEvent?.away_team);
   const targetHome = normalizeString(homeName);
   const targetAway = normalizeString(awayName);
 
   let score = 0;
-  if (oddsHome === targetHome) score += 2;
-  if (oddsAway === targetAway) score += 2;
-  if (normalizeString(oddsEvent?.sport_key) === ODDS_API_SPORT) score += 1;
+  if (oddsHome === targetHome) score += 5;
+  if (oddsAway === targetAway) score += 5;
+
+  if (commenceTime && oddsEvent?.commence_time) {
+    const diff = Math.abs(new Date(oddsEvent.commence_time).getTime() - new Date(commenceTime).getTime());
+    if (diff <= 1000 * 60 * 180) score += 2;
+  }
 
   return score;
 }
@@ -859,35 +814,12 @@ function findMatchingOddsEvent(oddsEvents, homeName, awayName, commenceTime = nu
   const scored = oddsEvents
     .map(event => ({
       event,
-      score: buildOddsApiEventMatchScore(event, homeName, awayName)
+      score: buildOddsApiEventMatchScore(event, homeName, awayName, commenceTime)
     }))
-    .filter(item => item.score >= 4)
+    .filter(item => item.score >= 10)
     .sort((a, b) => b.score - a.score);
 
-  if (scored.length) return scored[0].event;
-
-  if (!commenceTime) return null;
-  const targetTs = new Date(commenceTime).getTime();
-
-  const nearTime = oddsEvents
-    .map(event => ({
-      event,
-      diff: Math.abs(new Date(event?.commence_time || 0).getTime() - targetTs)
-    }))
-    .sort((a, b) => a.diff - b.diff);
-
-  return nearTime[0]?.event || null;
-}
-
-async function fetchOddsApiEvents() {
-  const url = `https://api.the-odds-api.com/v4/sports/${ODDS_API_SPORT}/odds?apiKey=${encodeURIComponent(ODDS_API_KEY)}&regions=${encodeURIComponent(ODDS_API_REGIONS)}&markets=${encodeURIComponent(ODDS_API_MARKETS)}&oddsFormat=decimal&dateFormat=iso`;
-
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Odds API HTTP ${res.status}`);
-  }
-
-  return res.json();
+  return scored[0]?.event || null;
 }
 
 function normalizeBookmakers(bookmakers) {
@@ -898,211 +830,27 @@ function normalizeBookmakers(bookmakers) {
   }));
 }
 
-function selectPreferredBookmakers(bookmakers) {
-  const normalized = normalizeBookmakers(bookmakers);
-
-  return [...normalized].sort((a, b) => {
+function sortBookmakersByPriority(bookmakers) {
+  return [...normalizeBookmakers(bookmakers)].sort((a, b) => {
     const priorityDiff = getBookmakerPriorityIndex(a.key) - getBookmakerPriorityIndex(b.key);
     if (priorityDiff !== 0) return priorityDiff;
     return String(a.title).localeCompare(String(b.title));
   });
 }
 
-function buildMoneylineCandidate(bookmaker, homeName, awayName, awayLean, homeLean) {
-  const market = bookmaker?.markets?.find(m => m?.key === "h2h");
-  if (!market?.outcomes?.length) return null;
-
-  if (awayLean > homeLean) {
-    const awayOutcome = findOutcomeByTeamName(market.outcomes, awayName);
-    const price = Number(awayOutcome?.price);
-    if (!awayOutcome || !price || price < 1.5) return null;
-
-    return {
-      type: "moneyline",
-      marketKey: "h2h",
-      bookmakerKey: bookmaker.key,
-      bookmakerTitle: bookmaker.title,
-      line: null,
-      side: awayName,
-      label: `${awayName} gana`,
-      odds: price,
-      impliedProbability: impliedProbabilityFromDecimal(price)
-    };
-  }
-
-  if (homeLean > awayLean) {
-    const homeOutcome = findOutcomeByTeamName(market.outcomes, homeName);
-    const price = Number(homeOutcome?.price);
-    if (!homeOutcome || !price || price < 1.5) return null;
-
-    return {
-      type: "moneyline",
-      marketKey: "h2h",
-      bookmakerKey: bookmaker.key,
-      bookmakerTitle: bookmaker.title,
-      line: null,
-      side: homeName,
-      label: `${homeName} gana`,
-      odds: price,
-      impliedProbability: impliedProbabilityFromDecimal(price)
-    };
-  }
-
-  return null;
+function findOutcomeByTeamName(outcomes, teamName) {
+  const target = normalizeString(teamName);
+  return (outcomes || []).find(outcome => normalizeString(outcome?.name) === target) || null;
 }
 
-function buildSpreadCandidates(bookmaker, homeName, awayName, awayLean, homeLean) {
-  const market = bookmaker?.markets?.find(m => m?.key === "spreads");
-  if (!market?.outcomes?.length) return [];
-
-  const candidates = [];
-
-  if (awayLean > homeLean) {
-    const awayOutcome = findOutcomeByTeamName(market.outcomes, awayName);
-    const price = Number(awayOutcome?.price);
-    const point = Number(awayOutcome?.point);
-    if (awayOutcome && !Number.isNaN(point) && price >= 1.5) {
-      candidates.push({
-        type: "spread",
-        marketKey: "spreads",
-        bookmakerKey: bookmaker.key,
-        bookmakerTitle: bookmaker.title,
-        line: point,
-        side: awayName,
-        label: `${awayName} ${point > 0 ? `+${point}` : point}`,
-        odds: price,
-        impliedProbability: impliedProbabilityFromDecimal(price)
-      });
-    }
-  }
-
-  if (homeLean > awayLean) {
-    const homeOutcome = findOutcomeByTeamName(market.outcomes, homeName);
-    const price = Number(homeOutcome?.price);
-    const point = Number(homeOutcome?.point);
-    if (homeOutcome && !Number.isNaN(point) && price >= 1.5) {
-      candidates.push({
-        type: "spread",
-        marketKey: "spreads",
-        bookmakerKey: bookmaker.key,
-        bookmakerTitle: bookmaker.title,
-        line: point,
-        side: homeName,
-        label: `${homeName} ${point > 0 ? `+${point}` : point}`,
-        odds: price,
-        impliedProbability: impliedProbabilityFromDecimal(price)
-      });
-    }
-  }
-
-  return candidates;
-}
-
-function buildTotalCandidates(bookmaker, projectedTotal, projectedDiff, homeName, awayName) {
-  const market = bookmaker?.markets?.find(m => m?.key === "totals");
-  if (!market?.outcomes?.length) return [];
-
-  const outcomes = market.outcomes;
-  const over = outcomes.find(outcome => normalizeString(outcome?.name) === "over");
-  const under = outcomes.find(outcome => normalizeString(outcome?.name) === "under");
-  if (!over || !under) return [];
-
-  const candidates = [];
-
-  const overPoint = Number(over?.point);
-  const underPoint = Number(under?.point);
-  const overPrice = Number(over?.price);
-  const underPrice = Number(under?.price);
-
-  if (!Number.isNaN(overPoint) && overPrice >= 1.5 && projectedTotal !== null && projectedTotal >= overPoint + 4) {
-    candidates.push({
-      type: "total",
-      marketKey: "totals",
-      bookmakerKey: bookmaker.key,
-      bookmakerTitle: bookmaker.title,
-      line: overPoint,
-      side: "Over",
-      label: `Más de ${overPoint}`,
-      odds: overPrice,
-      impliedProbability: impliedProbabilityFromDecimal(overPrice)
-    });
-  }
-
-  if (!Number.isNaN(underPoint) && underPrice >= 1.5 && projectedTotal !== null && projectedTotal <= underPoint - 4) {
-    candidates.push({
-      type: "total",
-      marketKey: "totals",
-      bookmakerKey: bookmaker.key,
-      bookmakerTitle: bookmaker.title,
-      line: underPoint,
-      side: "Under",
-      label: `Menos de ${underPoint}`,
-      odds: underPrice,
-      impliedProbability: impliedProbabilityFromDecimal(underPrice)
-    });
-  }
-
-  if (Math.abs(projectedDiff) < 2 && projectedTotal !== null) {
-    return candidates;
-  }
-
-  return candidates;
-}
-
-function scoreCandidate(candidate, modelEdgeAbs, sourcePriorityIndex) {
-  let score = 0;
-
-  if (candidate.type === "moneyline") score += 24;
-  if (candidate.type === "spread") score += 18;
-  if (candidate.type === "total") score += 16;
-
-  score += Math.min(modelEdgeAbs * 2, 18);
-
-  if (candidate.odds >= 1.5 && candidate.odds < 1.7) score += 3;
-  if (candidate.odds >= 1.7 && candidate.odds <= 2.15) score += 5;
-  if (candidate.odds > 2.15) score += 2;
-
-  score -= Math.min(sourcePriorityIndex, 20);
-
-  return score;
-}
-
-function chooseBestBetCandidate(candidates, modelEdgeAbs) {
-  if (!candidates.length) return null;
-
-  const scored = candidates
-    .map(candidate => ({
-      ...candidate,
-      score: scoreCandidate(candidate, modelEdgeAbs, getBookmakerPriorityIndex(candidate.bookmakerKey))
-    }))
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      if (getBookmakerPriorityIndex(a.bookmakerKey) !== getBookmakerPriorityIndex(b.bookmakerKey)) {
-        return getBookmakerPriorityIndex(a.bookmakerKey) - getBookmakerPriorityIndex(b.bookmakerKey);
-      }
-      return b.odds - a.odds;
-    });
-
-  return scored[0];
-}
-
-function classifyBetStrength(edgeGap, candidateOdds, candidateType) {
-  if (edgeGap >= 5 && candidateOdds >= 1.5) {
-    return { level: "Fuerte", stake: "10% del bank" };
-  }
-
-  if (edgeGap >= 3 && candidateOdds >= 1.5) {
-    return { level: "Medio", stake: "7% del bank" };
-  }
-
-  if (edgeGap >= 2 && candidateOdds >= 1.5) {
-    return { level: "Leve", stake: "5% del bank" };
-  }
-
+function classifyBetStrength(edgeGap, odds) {
+  if (edgeGap >= 5 && odds >= 1.5) return { level: "Fuerte", stake: "10% del bank" };
+  if (edgeGap >= 3 && odds >= 1.5) return { level: "Medio", stake: "7% del bank" };
+  if (edgeGap >= 2 && odds >= 1.5) return { level: "Leve", stake: "5% del bank" };
   return { level: "No bet", stake: "0%" };
 }
 
-function buildFallbackNoBet(reason) {
+function makeNoBet(reason) {
   return {
     selection: null,
     strength: { level: "No bet", stake: "0%" },
@@ -1110,111 +858,162 @@ function buildFallbackNoBet(reason) {
   };
 }
 
-function getBookmakerDisplayName(key, title) {
-  const normalized = String(key || "").toLowerCase();
-  if (normalized === "bet365_uk") return "bet365";
-  return title || key || "Casa";
-}
-
-function renderBetRecommendationBlock(recommendation) {
-  if (!recommendation?.selection) {
-    return `
-      <div class="betting-notes">
-        <h4>No bet</h4>
-        <p>${escapeHtml(recommendation?.reason || "No se encontró una cuota válida con el filtro actual.")}</p>
-      </div>
-    `;
-  }
-
-  const selection = recommendation.selection;
-  const strength = recommendation.strength || { level: "No bet", stake: "0%" };
-
-  return `
+function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanText) {
+  const headerHtml = `
     <div class="betting-notes">
-      <h4>Pick recomendado: ${escapeHtml(selection.label)}</h4>
-      <p>Mercado: ${escapeHtml(selection.type.toUpperCase())} · Casa: ${escapeHtml(getBookmakerDisplayName(selection.bookmakerKey, selection.bookmakerTitle))}</p>
-      <p>Cuota: <strong>${escapeHtml(formatOddsDecimal(selection.odds))}</strong> · Prob. implícita: ${escapeHtml(formatPercent(selection.impliedProbability))}</p>
-      <p>Fuerza: ${escapeHtml(strength.level)} · Stake: ${escapeHtml(strength.stake)}</p>
-      <p style="margin-top:10px;">${escapeHtml(recommendation.reason || "")}</p>
+      <h4>${escapeHtml(edgeText)}</h4>
+      <p>${escapeHtml(autoNote)}</p>
+      <p style="margin-top:10px;"><strong>${escapeHtml(leanText)}</strong></p>
+      ${
+        recommendation?.selection
+          ? `
+            <hr style="margin:12px 0; opacity:.15;">
+            <p><strong>Pick recomendado:</strong> ${escapeHtml(recommendation.selection.label)}</p>
+            <p>Mercado: ${escapeHtml(recommendation.selection.type.toUpperCase())} · Casa: ${escapeHtml(getBookmakerDisplayName(recommendation.selection.bookmakerKey, recommendation.selection.bookmakerTitle))}</p>
+            <p>Cuota: <strong>${escapeHtml(formatOddsDecimal(recommendation.selection.odds))}</strong> · Prob. implícita: ${escapeHtml(formatPercent(recommendation.selection.impliedProbability))}</p>
+            <p>Fuerza: ${escapeHtml(recommendation.strength.level)} · Stake: ${escapeHtml(recommendation.strength.stake)}</p>
+            <p style="margin-top:10px;">${escapeHtml(recommendation.reason || "")}</p>
+          `
+          : `
+            <hr style="margin:12px 0; opacity:.15;">
+            <p><strong>Pick recomendado:</strong> No bet</p>
+            <p>${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadística.")}</p>
+          `
+      }
     </div>
   `;
+
+  return headerHtml;
 }
 
-function buildRecommendationReason(selection, awayName, homeName, awayEdge, homeEdge) {
-  const edgeGap = Math.abs(awayEdge - homeEdge);
+function selectSideRecommendation(bookmakers, preferredSideName) {
+  const ordered = sortBookmakersByPriority(bookmakers);
 
-  if (!selection) {
-    return "La ventaja estadística no encontró una cuota mínima de 1.50 que valga la pena jugar.";
+  for (const bookmaker of ordered) {
+    const h2h = bookmaker?.markets?.find(m => m?.key === "h2h");
+    const spreads = bookmaker?.markets?.find(m => m?.key === "spreads");
+
+    const mlOutcome = findOutcomeByTeamName(h2h?.outcomes || [], preferredSideName);
+    const mlPrice = Number(mlOutcome?.price);
+
+    if (mlOutcome && !Number.isNaN(mlPrice) && mlPrice >= 1.5) {
+      return {
+        type: "moneyline",
+        bookmakerKey: bookmaker.key,
+        bookmakerTitle: bookmaker.title,
+        side: preferredSideName,
+        label: `${preferredSideName} gana`,
+        odds: mlPrice,
+        impliedProbability: impliedProbabilityFromDecimal(mlPrice)
+      };
+    }
+
+    const spreadOutcome = findOutcomeByTeamName(spreads?.outcomes || [], preferredSideName);
+    const spreadPrice = Number(spreadOutcome?.price);
+    const spreadPoint = Number(spreadOutcome?.point);
+
+    if (spreadOutcome && !Number.isNaN(spreadPrice) && spreadPrice >= 1.5 && !Number.isNaN(spreadPoint)) {
+      return {
+        type: "spread",
+        bookmakerKey: bookmaker.key,
+        bookmakerTitle: bookmaker.title,
+        side: preferredSideName,
+        line: spreadPoint,
+        label: `${preferredSideName} ${spreadPoint > 0 ? `+${spreadPoint}` : spreadPoint}`,
+        odds: spreadPrice,
+        impliedProbability: impliedProbabilityFromDecimal(spreadPrice)
+      };
+    }
   }
 
-  if (selection.type === "moneyline") {
-    return `${selection.side} es el lado con mejor respaldo estadístico y la cuota todavía entra en el rango jugable. Diferencial del modelo: ${edgeGap} puntos de ventaja.`;
-  }
-
-  if (selection.type === "spread") {
-    return `El lado favorito por el modelo no paga suficiente en ML o rinde mejor en línea. Se propone spread para capturar valor sin salir del sesgo estadístico principal.`;
-  }
-
-  if (selection.type === "total") {
-    return `El cruce deja una lectura más clara en ritmo y producción esperada que en ganador directo, por eso el valor aparece en el total.`;
-  }
-
-  return "Recomendación generada con base en señal estadística y validación de cuota.";
+  return null;
 }
 
-function buildOddsRecommendation({
-  oddsEvent,
-  homeName,
-  awayName,
-  awayEdge,
-  homeEdge,
-  projectedAwayScore,
-  projectedHomeScore
-}) {
+function selectTotalRecommendation(bookmakers, projectedTotal) {
+  if (projectedTotal === null) return null;
+
+  const ordered = sortBookmakersByPriority(bookmakers);
+
+  for (const bookmaker of ordered) {
+    const totals = bookmaker?.markets?.find(m => m?.key === "totals");
+    const over = (totals?.outcomes || []).find(o => normalizeString(o?.name) === "over");
+    const under = (totals?.outcomes || []).find(o => normalizeString(o?.name) === "under");
+
+    const overPoint = Number(over?.point);
+    const underPoint = Number(under?.point);
+    const overPrice = Number(over?.price);
+    const underPrice = Number(under?.price);
+
+    if (!Number.isNaN(overPoint) && !Number.isNaN(overPrice) && overPrice >= 1.5 && projectedTotal >= overPoint + 6) {
+      return {
+        type: "total",
+        bookmakerKey: bookmaker.key,
+        bookmakerTitle: bookmaker.title,
+        side: "Over",
+        line: overPoint,
+        label: `Más de ${overPoint}`,
+        odds: overPrice,
+        impliedProbability: impliedProbabilityFromDecimal(overPrice)
+      };
+    }
+
+    if (!Number.isNaN(underPoint) && !Number.isNaN(underPrice) && underPrice >= 1.5 && projectedTotal <= underPoint - 6) {
+      return {
+        type: "total",
+        bookmakerKey: bookmaker.key,
+        bookmakerTitle: bookmaker.title,
+        side: "Under",
+        line: underPoint,
+        label: `Menos de ${underPoint}`,
+        odds: underPrice,
+        impliedProbability: impliedProbabilityFromDecimal(underPrice)
+      };
+    }
+  }
+
+  return null;
+}
+
+function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, homeEdge, projectedTotal }) {
   if (!oddsEvent?.bookmakers?.length) {
-    return buildFallbackNoBet("No se encontraron cuotas disponibles para este partido en The Odds API.");
+    return makeNoBet("No se encontraron cuotas disponibles para este partido.");
   }
 
-  const sortedBookmakers = selectPreferredBookmakers(oddsEvent.bookmakers);
-  const projectedTotal =
-    projectedAwayScore !== null && projectedHomeScore !== null
-      ? projectedAwayScore + projectedHomeScore
-      : null;
+  const edgeGap = Math.abs(awayEdge - homeEdge);
+  const sideThreshold = 2;
+  const totalOnlyThreshold = 1;
 
-  const projectedDiff =
-    projectedAwayScore !== null && projectedHomeScore !== null
-      ? projectedAwayScore - projectedHomeScore
-      : awayEdge - homeEdge;
-
-  const candidates = [];
-
-  for (const bookmaker of sortedBookmakers) {
-    const moneylineCandidate = buildMoneylineCandidate(bookmaker, homeName, awayName, awayEdge, homeEdge);
-    if (moneylineCandidate) candidates.push(moneylineCandidate);
-
-    const spreadCandidates = buildSpreadCandidates(bookmaker, homeName, awayName, awayEdge, homeEdge);
-    if (spreadCandidates.length) candidates.push(...spreadCandidates);
-
-    const totalCandidates = buildTotalCandidates(bookmaker, projectedTotal, projectedDiff, homeName, awayName);
-    if (totalCandidates.length) candidates.push(...totalCandidates);
+  if (awayEdge >= homeEdge + sideThreshold) {
+    const selection = selectSideRecommendation(oddsEvent.bookmakers, awayName);
+    if (!selection) return makeNoBet(`La lectura favorece a ${awayName}, pero no apareció una ML o spread jugable desde cuota 1.50.`);
+    return {
+      selection,
+      strength: classifyBetStrength(edgeGap, selection.odds),
+      reason: `${awayName} es el lado que respalda la lectura estadística del matchup.`
+    };
   }
 
-  const bestSelection = chooseBestBetCandidate(candidates, Math.abs(awayEdge - homeEdge));
-
-  if (!bestSelection) {
-    return buildFallbackNoBet("No apareció una cuota válida de 1.50 o más en Betano, Novibet, bet365 ni en el resto de casas disponibles.");
+  if (homeEdge >= awayEdge + sideThreshold) {
+    const selection = selectSideRecommendation(oddsEvent.bookmakers, homeName);
+    if (!selection) return makeNoBet(`La lectura favorece a ${homeName}, pero no apareció una ML o spread jugable desde cuota 1.50.`);
+    return {
+      selection,
+      strength: classifyBetStrength(edgeGap, selection.odds),
+      reason: `${homeName} es el lado que respalda la lectura estadística del matchup.`
+    };
   }
 
-  const strength = classifyBetStrength(Math.abs(awayEdge - homeEdge), bestSelection.odds, bestSelection.type);
-  if (strength.level === "No bet") {
-    return buildFallbackNoBet("La ventaja estadística existe, pero no alcanza para recomendar apuesta con el filtro actual.");
+  if (edgeGap <= totalOnlyThreshold) {
+    const selection = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
+    if (!selection) return makeNoBet("Matchup equilibrado y sin total con valor suficiente desde cuota 1.50.");
+    return {
+      selection,
+      strength: classifyBetStrength(2, selection.odds),
+      reason: "Como el lado está equilibrado, el mejor ángulo aparece en el total."
+    };
   }
 
-  return {
-    selection: bestSelection,
-    strength,
-    reason: buildRecommendationReason(bestSelection, awayName, homeName, awayEdge, homeEdge)
-  };
+  return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadísticas.");
 }
 
 async function loadNBAGames() {
@@ -1225,10 +1024,7 @@ async function loadNBAGames() {
 
   try {
     const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard");
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
     const events = data.events || [];
@@ -1255,15 +1051,8 @@ async function loadNBAGames() {
       const homeScoreRaw = home?.score ?? "-";
       const awayScoreRaw = away?.score ?? "-";
 
-      const homeScore =
-        typeof homeScoreRaw === "object"
-          ? homeScoreRaw?.displayValue ?? "-"
-          : homeScoreRaw;
-
-      const awayScore =
-        typeof awayScoreRaw === "object"
-          ? awayScoreRaw?.displayValue ?? "-"
-          : awayScoreRaw;
+      const homeScore = typeof homeScoreRaw === "object" ? homeScoreRaw?.displayValue ?? "-" : homeScoreRaw;
+      const awayScore = typeof awayScoreRaw === "object" ? awayScoreRaw?.displayValue ?? "-" : awayScoreRaw;
 
       const rawStatus = event.status?.type?.description || "Sin estado";
       const gameStatus = formatStatusText(rawStatus);
@@ -1362,24 +1151,16 @@ async function analyzeGame(gameId) {
     const homeTeamId = getTeamIdFromCompetitor(home);
     const awayTeamId = getTeamIdFromCompetitor(away);
 
-    const gameDate = comp?.date
-      ? new Date(comp.date).toLocaleString("es-CL")
-      : "Pendiente";
+    const gameDate = comp?.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
 
-    const [
-      standingsRes,
-      awayScheduleRes,
-      homeScheduleRes,
-      oddsRes
-    ] = await Promise.allSettled([
+    const [standingsRes, awayScheduleRes, homeScheduleRes, oddsRes] = await Promise.allSettled([
       fetchConferenceStandingsSorted(),
       fetchTeamSchedule(awayTeamId),
       fetchTeamSchedule(homeTeamId),
       fetchOddsApiEvents()
     ]);
 
-    const standingsData =
-      standingsRes.status === "fulfilled" ? standingsRes.value : null;
+    const standingsData = standingsRes.status === "fulfilled" ? standingsRes.value : null;
 
     const standingsLookup = standingsData
       ? buildStandingsLookup(standingsData)
@@ -1393,11 +1174,8 @@ async function analyzeGame(gameId) {
       leagueProfilesMap = {};
     }
 
-    const awaySchedule =
-      awayScheduleRes.status === "fulfilled" ? awayScheduleRes.value : null;
-
-    const homeSchedule =
-      homeScheduleRes.status === "fulfilled" ? homeScheduleRes.value : null;
+    const awaySchedule = awayScheduleRes.status === "fulfilled" ? awayScheduleRes.value : null;
+    const homeSchedule = homeScheduleRes.status === "fulfilled" ? homeScheduleRes.value : null;
 
     const awayEntry =
       standingsLookup.byTeamId[String(awayTeamId)] ||
@@ -1420,15 +1198,8 @@ async function analyzeGame(gameId) {
     const awayB2B = getB2BStatus(awaySchedule, awayTeamId, comp?.date);
     const homeB2B = getB2BStatus(homeSchedule, homeTeamId, comp?.date);
 
-    const awayContext = getContextFromConferencePosition(
-      awayEntry?.conferencePosition,
-      awayEntry?.clincher || null
-    );
-
-    const homeContext = getContextFromConferencePosition(
-      homeEntry?.conferencePosition,
-      homeEntry?.clincher || null
-    );
+    const awayContext = getContextFromConferencePosition(awayEntry?.conferencePosition, awayEntry?.clincher || null);
+    const homeContext = getContextFromConferencePosition(homeEntry?.conferencePosition, homeEntry?.clincher || null);
 
     const awayProfileRanked = leagueProfilesMap[String(awayTeamId)] || {
       offenseRank: null,
@@ -1546,46 +1317,23 @@ async function analyzeGame(gameId) {
     let autoNote = "La comparación es competitiva y no deja una ventaja contundente.";
     if (awayEdge > homeEdge) {
       autoNote = `${awayName} llega mejor por perfil global, forma ajustada y rendimiento reciente como visitante.`;
-      if (awayWeakScheduleRecent) {
-        autoNote = `${awayName} llega mejor, pero parte de su forma reciente fue ante rivales más débiles.`;
-      }
+      if (awayWeakScheduleRecent) autoNote = `${awayName} llega mejor, pero parte de su forma reciente fue ante rivales más débiles.`;
       if (homeStrongScheduleRecent && awayEdge - homeEdge <= 2) {
         autoNote = `${awayName} tiene números favorables, aunque ${homeName} enfrentó rivales más fuertes últimamente.`;
       }
     } else if (homeEdge > awayEdge) {
       autoNote = `${homeName} llega mejor por perfil global, forma ajustada y rendimiento reciente como local.`;
-      if (homeWeakScheduleRecent) {
-        autoNote = `${homeName} llega mejor, pero parte de su forma reciente fue ante rivales más débiles.`;
-      }
+      if (homeWeakScheduleRecent) autoNote = `${homeName} llega mejor, pero parte de su forma reciente fue ante rivales más débiles.`;
       if (awayStrongScheduleRecent && homeEdge - awayEdge <= 2) {
         autoNote = `${homeName} tiene mejores señales globales, pero ${awayName} viene de enfrentar rivales más fuertes últimamente.`;
       }
     }
 
-    const recordCompare = compareNumbersHigherBetter(
-      awayRecordParsed?.pct ?? null,
-      homeRecordParsed?.pct ?? null
-    );
-
-    const recentScoredCompare = compareNumbersHigherBetter(
-      awayRecentScoredNum,
-      homeRecentScoredNum
-    );
-
-    const recentAllowedCompare = compareNumbersLowerBetter(
-      awayRecentAllowedNum,
-      homeRecentAllowedNum
-    );
-
-    const adjustedDiffCompare = compareNumbersHigherBetter(
-      awayAdjustedDiffNum,
-      homeAdjustedDiffNum
-    );
-
-    const venueCompare = compareNumbersHigherBetter(
-      awayVenueDiffNum,
-      homeVenueDiffNum
-    );
+    const recordCompare = compareNumbersHigherBetter(awayRecordParsed?.pct ?? null, homeRecordParsed?.pct ?? null);
+    const recentScoredCompare = compareNumbersHigherBetter(awayRecentScoredNum, homeRecentScoredNum);
+    const recentAllowedCompare = compareNumbersLowerBetter(awayRecentAllowedNum, homeRecentAllowedNum);
+    const adjustedDiffCompare = compareNumbersHigherBetter(awayAdjustedDiffNum, homeAdjustedDiffNum);
+    const venueCompare = compareNumbersHigherBetter(awayVenueDiffNum, homeVenueDiffNum);
 
     const projectedAwayScore =
       awayRecentScoredNum !== null && homeRecentAllowedNum !== null
@@ -1597,6 +1345,11 @@ async function analyzeGame(gameId) {
         ? (homeRecentScoredNum + awayRecentAllowedNum) / 2
         : homeRecentScoredNum;
 
+    const projectedTotal =
+      projectedAwayScore !== null && projectedHomeScore !== null
+        ? projectedAwayScore + projectedHomeScore
+        : null;
+
     const oddsEvents =
       oddsRes.status === "fulfilled" && Array.isArray(oddsRes.value)
         ? oddsRes.value
@@ -1606,23 +1359,12 @@ async function analyzeGame(gameId) {
 
     const betRecommendation = buildOddsRecommendation({
       oddsEvent: matchingOddsEvent,
-      homeName,
       awayName,
+      homeName,
       awayEdge,
       homeEdge,
-      projectedAwayScore,
-      projectedHomeScore
+      projectedTotal
     });
-
-    const projectedTotal =
-      projectedAwayScore !== null && projectedHomeScore !== null
-        ? projectedAwayScore + projectedHomeScore
-        : null;
-
-    const projectedMargin =
-      projectedAwayScore !== null && projectedHomeScore !== null
-        ? projectedAwayScore - projectedHomeScore
-        : null;
 
     analysisPanel.innerHTML = `
       <div class="analysis-box">
@@ -1632,7 +1374,7 @@ async function analyzeGame(gameId) {
           <p class="analysis-date">${escapeHtml(gameDate)}</p>
         </div>
 
-        ${renderBetRecommendationBlock(betRecommendation)}
+        ${renderBetRecommendationBlock(betRecommendation, edgeText, autoNote, leanText)}
 
         <div class="pregame-shell">
           <div class="pregame-compare">
@@ -1642,12 +1384,7 @@ async function analyzeGame(gameId) {
               <div>${escapeHtml(homeName)}</div>
             </div>
 
-            ${buildStatRow(
-              escapeHtml(awayStats.conference),
-              "Conferencia",
-              escapeHtml(homeStats.conference)
-            )}
-
+            ${buildStatRow(escapeHtml(awayStats.conference), "Conferencia", escapeHtml(homeStats.conference))}
             ${buildStatRow(
               escapeHtml(`${awayStats.record} · ${awayStats.position}º`),
               "Récord / Posición",
@@ -1655,25 +1392,9 @@ async function analyzeGame(gameId) {
               recordCompare.away,
               recordCompare.home
             )}
-
-            ${buildStatRow(
-              escapeHtml(awayStats.context),
-              "Contexto",
-              escapeHtml(homeStats.context)
-            )}
-
-            ${buildStatRow(
-              awayStats.recentFormHtml,
-              "Últimos 5",
-              homeStats.recentFormHtml
-            )}
-
-            ${buildStatRow(
-              escapeHtml(awayStats.rivalQuality),
-              "Calidad rival",
-              escapeHtml(homeStats.rivalQuality)
-            )}
-
+            ${buildStatRow(escapeHtml(awayStats.context), "Contexto", escapeHtml(homeStats.context))}
+            ${buildStatRow(awayStats.recentFormHtml, "Últimos 5", homeStats.recentFormHtml)}
+            ${buildStatRow(escapeHtml(awayStats.rivalQuality), "Calidad rival", escapeHtml(homeStats.rivalQuality))}
             ${buildStatRow(
               escapeHtml(awayStats.venueSplit),
               "Forma fuera/casa",
@@ -1681,13 +1402,7 @@ async function analyzeGame(gameId) {
               venueCompare.away,
               venueCompare.home
             )}
-
-            ${buildStatRow(
-              escapeHtml(awayStats.teamStyle),
-              "Perfil actual",
-              escapeHtml(homeStats.teamStyle)
-            )}
-
+            ${buildStatRow(escapeHtml(awayStats.teamStyle), "Perfil actual", escapeHtml(homeStats.teamStyle))}
             ${buildStatRow(
               escapeHtml(awayStats.pointsScoredRecent),
               "Puntos anotados",
@@ -1695,7 +1410,6 @@ async function analyzeGame(gameId) {
               recentScoredCompare.away,
               recentScoredCompare.home
             )}
-
             ${buildStatRow(
               escapeHtml(awayStats.pointsAllowedRecent),
               "Puntos recibidos",
@@ -1703,7 +1417,6 @@ async function analyzeGame(gameId) {
               recentAllowedCompare.away,
               recentAllowedCompare.home
             )}
-
             ${buildStatRow(
               escapeHtml(awayStats.adjustedDiffRecent),
               "Margen ajustado",
@@ -1711,22 +1424,7 @@ async function analyzeGame(gameId) {
               adjustedDiffCompare.away,
               adjustedDiffCompare.home
             )}
-
-            ${buildStatRow(
-              escapeHtml(awayStats.b2b),
-              "B2B",
-              escapeHtml(homeStats.b2b)
-            )}
-          </div>
-
-          <div class="pregame-summary">
-            ${buildSingleColumnRow("Lectura del matchup", escapeHtml(edgeText))}
-            ${buildSingleColumnRow("Lean estadístico", escapeHtml(leanText))}
-            ${buildSingleColumnRow("Nota automática", escapeHtml(autoNote))}
-            ${buildSingleColumnRow("Proyección visitante", escapeHtml(formatOneDecimal(projectedAwayScore)))}
-            ${buildSingleColumnRow("Proyección local", escapeHtml(formatOneDecimal(projectedHomeScore)))}
-            ${buildSingleColumnRow("Total proyectado", escapeHtml(formatOneDecimal(projectedTotal)))}
-            ${buildSingleColumnRow("Margen proyectado", escapeHtml(formatSignedOneDecimal(projectedMargin)))}
+            ${buildStatRow(escapeHtml(awayStats.b2b), "B2B", escapeHtml(homeStats.b2b))}
           </div>
         </div>
       </div>
@@ -1747,18 +1445,11 @@ if (gamesContainer) {
   });
 }
 
-if (modalCloseBtn) {
-  modalCloseBtn.addEventListener("click", closeModal);
-}
-
-if (modalCloseBg) {
-  modalCloseBg.addEventListener("click", closeModal);
-}
+if (modalCloseBtn) modalCloseBtn.addEventListener("click", closeModal);
+if (modalCloseBg) modalCloseBg.addEventListener("click", closeModal);
 
 document.addEventListener("keydown", event => {
-  if (event.key === "Escape") {
-    closeModal();
-  }
+  if (event.key === "Escape") closeModal();
 });
 
 loadNBAGames();
