@@ -859,7 +859,7 @@ function makeNoBet(reason) {
 }
 
 function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanText) {
-  const headerHtml = `
+  return `
     <div class="betting-notes">
       <h4>${escapeHtml(edgeText)}</h4>
       <p>${escapeHtml(autoNote)}</p>
@@ -882,8 +882,6 @@ function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanTe
       }
     </div>
   `;
-
-  return headerHtml;
 }
 
 function selectSideRecommendation(bookmakers, preferredSideName) {
@@ -1016,6 +1014,35 @@ function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, home
   return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadísticas.");
 }
 
+function getLocalScoreboardDate(offsetDays = 0) {
+  const now = new Date();
+  const local = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays);
+  const yyyy = local.getFullYear();
+  const mm = String(local.getMonth() + 1).padStart(2, "0");
+  const dd = String(local.getDate()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}`;
+}
+
+async function fetchScoreboardByDate(dateStr) {
+  const urls = [
+    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr}`,
+    `https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr}`
+  ];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const data = await response.json();
+      if (Array.isArray(data?.events)) return data;
+    } catch (error) {
+      console.warn("Scoreboard fetch failed:", url, error);
+    }
+  }
+
+  return { events: [] };
+}
+
 async function loadNBAGames() {
   if (!statusEl || !gamesContainer) return;
 
@@ -1023,11 +1050,17 @@ async function loadNBAGames() {
   gamesContainer.innerHTML = "";
 
   try {
-    const response = await fetch("https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const todayDate = getLocalScoreboardDate(0);
+    const tomorrowDate = getLocalScoreboardDate(1);
 
-    const data = await response.json();
-    const events = data.events || [];
+    let data = await fetchScoreboardByDate(todayDate);
+    let events = data?.events || [];
+
+    if (!events.length) {
+      data = await fetchScoreboardByDate(tomorrowDate);
+      events = data?.events || [];
+    }
+
     scoreboardCache = events;
 
     if (!events.length) {
@@ -1037,6 +1070,7 @@ async function loadNBAGames() {
     }
 
     statusEl.textContent = `Se cargaron ${events.length} partidos NBA`;
+    gamesContainer.innerHTML = "";
 
     for (const event of events) {
       const comp = event.competitions?.[0] || null;
@@ -1051,8 +1085,15 @@ async function loadNBAGames() {
       const homeScoreRaw = home?.score ?? "-";
       const awayScoreRaw = away?.score ?? "-";
 
-      const homeScore = typeof homeScoreRaw === "object" ? homeScoreRaw?.displayValue ?? "-" : homeScoreRaw;
-      const awayScore = typeof awayScoreRaw === "object" ? awayScoreRaw?.displayValue ?? "-" : awayScoreRaw;
+      const homeScore =
+        typeof homeScoreRaw === "object"
+          ? homeScoreRaw?.displayValue ?? "-"
+          : homeScoreRaw;
+
+      const awayScore =
+        typeof awayScoreRaw === "object"
+          ? awayScoreRaw?.displayValue ?? "-"
+          : awayScoreRaw;
 
       const rawStatus = event.status?.type?.description || "Sin estado";
       const gameStatus = formatStatusText(rawStatus);
