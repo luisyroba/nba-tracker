@@ -1517,8 +1517,8 @@ document.addEventListener("keydown", (event) => {
 });
 
 async function loadNBAGames() {
-  if (!statusEl || !gamesContainer) return;
-  statusEl.textContent = "Cargando partidos NBA reales...";
+  if (!gamesContainer) return;
+  if (statusEl) statusEl.textContent = "Cargando partidos NBA reales...";
   gamesContainer.innerHTML = "";
 
   try {
