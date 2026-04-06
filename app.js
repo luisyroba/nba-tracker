@@ -484,15 +484,29 @@ function extractTeamProfile(statsData) {
   const categories =
     statsData?.results?.stats?.categories ||
     statsData?.statistics?.splits?.categories ||
+    statsData?.splits?.categories ||
     [];
 
   const allStats = categories.flatMap(cat => cat?.stats || []);
 
   function pick(names) {
     for (const name of names) {
-      const found = allStats.find(
-        stat => String(stat?.name || "").toLowerCase() === name.toLowerCase()
-      );
+      const target = String(name).toLowerCase();
+
+      const found = allStats.find(stat => {
+        const statName = String(stat?.name || "").toLowerCase();
+        const statDisplay = String(stat?.displayName || "").toLowerCase();
+        const statShort = String(stat?.shortDisplayName || "").toLowerCase();
+        const statAbbr = String(stat?.abbreviation || "").toLowerCase();
+
+        return (
+          statName === target ||
+          statDisplay === target ||
+          statShort === target ||
+          statAbbr === target
+        );
+      });
+
       if (found) {
         return found.displayValue ?? found.value ?? null;
       }
@@ -500,44 +514,58 @@ function extractTeamProfile(statsData) {
     return null;
   }
 
-  const ppg = toNumber(pick(["pointsPerGame", "avgPoints", "points"]));
-  const oppPpg = toNumber(pick(["pointsAllowedPerGame", "avgPointsAllowed", "oppPointsPerGame"]));
+  const ppg = toNumber(
+    pick([
+      "pointspergame",
+      "avgpoints",
+      "points",
+      "ppg"
+    ])
+  );
+
+  const oppPpg = toNumber(
+    pick([
+      "pointsallowedpergame",
+      "avgpointsallowed",
+      "opppointspergame",
+      "opponent points per game",
+      "points allowed per game",
+      "opp ppg",
+      "papg"
+    ])
+  );
 
   return { ppg, oppPpg };
 }
 
-function rankTierLabel(rank) {
+function rankTierLabel(rank, totalTeams = 30) {
   const num = Number(rank);
   if (Number.isNaN(num) || num <= 0) return "media";
-  if (num <= 10) return "fuerte";
-  if (num <= 20) return "media";
+
+  const topCut = Math.ceil(totalTeams / 3);
+  const midCut = Math.ceil((totalTeams * 2) / 3);
+
+  if (num <= topCut) return "fuerte";
+  if (num <= midCut) return "media";
   return "mala";
 }
 
-function getRankFromValue(value, sortedValues, higherIsBetter = true) {
-  if (value === null || value === undefined || Number.isNaN(value)) return null;
-
-  const unique = [...new Set(sortedValues.filter(v => v !== null && !Number.isNaN(v)))];
-  unique.sort((a, b) => (higherIsBetter ? b - a : a - b));
-
-  const index = unique.findIndex(v => v === value);
-  return index >= 0 ? index + 1 : null;
-}
-
-function getTeamStyleLabel(offenseRank, defenseRank) {
-  const offenseLabel = rankTierLabel(offenseRank);
-  const defenseLabel = rankTierLabel(defenseRank);
-  return `Ataque ${offenseLabel} | Defensa ${defenseLabel}`;
-}
-
 function buildLeagueProfilesMap(teamProfiles) {
-  const offenseValues = teamProfiles
+  const validProfiles = teamProfiles.filter(team =>
+    team?.profile &&
+    (team.profile.ppg !== null || team.profile.oppPpg !== null)
+  );
+
+  const offenseValues = validProfiles
     .map(team => team.profile?.ppg ?? null)
     .filter(v => v !== null && !Number.isNaN(v));
 
-  const defenseValues = teamProfiles
+  const defenseValues = validProfiles
     .map(team => team.profile?.oppPpg ?? null)
     .filter(v => v !== null && !Number.isNaN(v));
+
+  const totalOffenseTeams = offenseValues.length || 30;
+  const totalDefenseTeams = defenseValues.length || 30;
 
   const result = {};
 
@@ -548,7 +576,7 @@ function buildLeagueProfilesMap(teamProfiles) {
     result[String(team.teamId)] = {
       offenseRank,
       defenseRank,
-      label: getTeamStyleLabel(offenseRank, defenseRank)
+      label: `Ataque ${rankTierLabel(offenseRank, totalOffenseTeams)} | Defensa ${rankTierLabel(defenseRank, totalDefenseTeams)}`
     };
   }
 
