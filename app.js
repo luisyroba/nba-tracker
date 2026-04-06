@@ -559,10 +559,38 @@ function findStatValue(allStats, aliases, containsAliases = []) {
   return null;
 }
 
-function extractTeamProfile(statsData) {
+function getSeasonAllowedAverageFromSchedule(scheduleData, teamId) {
+  const events = normalizeGamesFromSchedule(scheduleData);
+
+  const completedGames = events
+    .map(event => getTeamGameInfo(event, teamId))
+    .filter(Boolean)
+    .filter(game => game.completed)
+    .filter(game => game.teamScore !== null && game.opponentScore !== null);
+
+  if (!completedGames.length) return null;
+
+  return average(completedGames.map(game => game.opponentScore));
+}
+
+function getSeasonScoredAverageFromSchedule(scheduleData, teamId) {
+  const events = normalizeGamesFromSchedule(scheduleData);
+
+  const completedGames = events
+    .map(event => getTeamGameInfo(event, teamId))
+    .filter(Boolean)
+    .filter(game => game.completed)
+    .filter(game => game.teamScore !== null && game.opponentScore !== null);
+
+  if (!completedGames.length) return null;
+
+  return average(completedGames.map(game => game.teamScore));
+}
+
+function extractTeamProfile(statsData, fallbackScheduleData = null, teamId = null) {
   const allStats = collectAllTeamStats(statsData);
 
-  const ppg = toNumber(
+  let ppg = toNumber(
     findStatValue(
       allStats,
       [
@@ -580,7 +608,7 @@ function extractTeamProfile(statsData) {
     )
   );
 
-  const oppPpg = toNumber(
+  let oppPpg = toNumber(
     findStatValue(
       allStats,
       [
@@ -601,6 +629,14 @@ function extractTeamProfile(statsData) {
       ]
     )
   );
+
+  if (ppg === null && fallbackScheduleData && teamId) {
+    ppg = getSeasonScoredAverageFromSchedule(fallbackScheduleData, teamId);
+  }
+
+  if (oppPpg === null && fallbackScheduleData && teamId) {
+    oppPpg = getSeasonAllowedAverageFromSchedule(fallbackScheduleData, teamId);
+  }
 
   return { ppg, oppPpg };
 }
@@ -683,10 +719,14 @@ async function getLeagueProfilesMap(standingsData) {
 
   const leagueProfilesRaw = await Promise.all(
     leagueTeamIds.map(async (teamId) => {
-      const stats = await fetchTeamSeasonStats(teamId);
+      const [stats, schedule] = await Promise.all([
+        fetchTeamSeasonStats(teamId),
+        fetchTeamSchedule(teamId)
+      ]);
+
       return {
         teamId,
-        profile: extractTeamProfile(stats)
+        profile: extractTeamProfile(stats, schedule, teamId)
       };
     })
   );
