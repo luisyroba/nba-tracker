@@ -6,6 +6,17 @@ const modal = document.getElementById("game-modal");
 const modalCloseBtn = document.getElementById("modal-close");
 const modalCloseBg = document.getElementById("modal-close-bg");
 
+const ODDS_API_KEY = "8a61d585e42c3c2ae6cd592a78c41019";
+const ODDS_API_SPORT = "basketball_nba";
+const ODDS_API_REGIONS = "eu,uk,us";
+const ODDS_API_MARKETS = "h2h,spreads,totals";
+const BOOKMAKER_PRIORITY = [
+  "betano",
+  "novibet",
+  "bet365",
+  "bet365_uk"
+];
+
 let leagueProfilesCache = null;
 let scoreboardCache = [];
 
@@ -95,6 +106,16 @@ function formatSignedOneDecimal(value) {
   return value.toFixed(1);
 }
 
+function formatOddsDecimal(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "Pendiente";
+  return Number(value).toFixed(2);
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "Pendiente";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 function compareNumbersHigherBetter(awayNum, homeNum) {
   if (awayNum === null || homeNum === null) return { away: "", home: "" };
   if (awayNum > homeNum) return { away: "edge", home: "" };
@@ -115,6 +136,15 @@ function buildStatRow(awayValue, label, homeValue, awayClass = "", homeClass = "
       <div class="away ${awayClass}">${awayValue}</div>
       <div class="metric">${escapeHtml(label)}</div>
       <div class="home ${homeClass}">${homeValue}</div>
+    </div>
+  `;
+}
+
+function buildSingleColumnRow(label, value) {
+  return `
+    <div class="pregame-single-row">
+      <div class="metric">${escapeHtml(label)}</div>
+      <div class="single-value">${value}</div>
     </div>
   `;
 }
@@ -777,6 +807,416 @@ function createEmptyStandingsLookup() {
   return { entries: [], byTeamId: {}, byAbbr: {}, byName: {} };
 }
 
+function normalizeString(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function impliedProbabilityFromDecimal(decimalOdds) {
+  const odds = Number(decimalOdds);
+  if (!odds || Number.isNaN(odds) || odds <= 1) return null;
+  return 1 / odds;
+}
+
+function getStakeLabelByStrength(strength) {
+  if (strength === "Fuerte") return "10% del bank";
+  if (strength === "Medio") return "7% del bank";
+  if (strength === "Leve") return "5% del bank";
+  return "0%";
+}
+
+function getBookmakerPriorityIndex(key) {
+  const idx = BOOKMAKER_PRIORITY.indexOf(String(key || "").toLowerCase());
+  return idx === -1 ? 999 : idx;
+}
+
+function findOutcomeByTeamName(outcomes, teamName) {
+  const target = normalizeString(teamName);
+  return (outcomes || []).find(outcome => normalizeString(outcome?.name) === target) || null;
+}
+
+function buildOddsApiEventMatchScore(oddsEvent, homeName, awayName) {
+  const oddsHome = normalizeString(oddsEvent?.home_team);
+  const oddsAway = normalizeString(oddsEvent?.away_team);
+  const targetHome = normalizeString(homeName);
+  const targetAway = normalizeString(awayName);
+
+  let score = 0;
+  if (oddsHome === targetHome) score += 2;
+  if (oddsAway === targetAway) score += 2;
+  if (normalizeString(oddsEvent?.sport_key) === ODDS_API_SPORT) score += 1;
+
+  return score;
+}
+
+function findMatchingOddsEvent(oddsEvents, homeName, awayName, commenceTime = null) {
+  if (!Array.isArray(oddsEvents) || !oddsEvents.length) return null;
+
+  const scored = oddsEvents
+    .map(event => ({
+      event,
+      score: buildOddsApiEventMatchScore(event, homeName, awayName)
+    }))
+    .filter(item => item.score >= 4)
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length) return scored[0].event;
+
+  if (!commenceTime) return null;
+  const targetTs = new Date(commenceTime).getTime();
+
+  const nearTime = oddsEvents
+    .map(event => ({
+      event,
+      diff: Math.abs(new Date(event?.commence_time || 0).getTime() - targetTs)
+    }))
+    .sort((a, b) => a.diff - b.diff);
+
+  return nearTime[0]?.event || null;
+}
+
+async function fetchOddsApiEvents() {
+  const url = `https://api.the-odds-api.com/v4/sports/${ODDS_API_SPORT}/odds?apiKey=${encodeURIComponent(ODDS_API_KEY)}&regions=${encodeURIComponent(ODDS_API_REGIONS)}&markets=${encodeURIComponent(ODDS_API_MARKETS)}&oddsFormat=decimal&dateFormat=iso`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Odds API HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+function normalizeBookmakers(bookmakers) {
+  return (bookmakers || []).map(bookmaker => ({
+    ...bookmaker,
+    key: String(bookmaker?.key || "").toLowerCase(),
+    title: bookmaker?.title || bookmaker?.key || "Casa"
+  }));
+}
+
+function selectPreferredBookmakers(bookmakers) {
+  const normalized = normalizeBookmakers(bookmakers);
+
+  return [...normalized].sort((a, b) => {
+    const priorityDiff = getBookmakerPriorityIndex(a.key) - getBookmakerPriorityIndex(b.key);
+    if (priorityDiff !== 0) return priorityDiff;
+    return String(a.title).localeCompare(String(b.title));
+  });
+}
+
+function buildMoneylineCandidate(bookmaker, homeName, awayName, awayLean, homeLean) {
+  const market = bookmaker?.markets?.find(m => m?.key === "h2h");
+  if (!market?.outcomes?.length) return null;
+
+  if (awayLean > homeLean) {
+    const awayOutcome = findOutcomeByTeamName(market.outcomes, awayName);
+    const price = Number(awayOutcome?.price);
+    if (!awayOutcome || !price || price < 1.5) return null;
+
+    return {
+      type: "moneyline",
+      marketKey: "h2h",
+      bookmakerKey: bookmaker.key,
+      bookmakerTitle: bookmaker.title,
+      line: null,
+      side: awayName,
+      label: `${awayName} gana`,
+      odds: price,
+      impliedProbability: impliedProbabilityFromDecimal(price)
+    };
+  }
+
+  if (homeLean > awayLean) {
+    const homeOutcome = findOutcomeByTeamName(market.outcomes, homeName);
+    const price = Number(homeOutcome?.price);
+    if (!homeOutcome || !price || price < 1.5) return null;
+
+    return {
+      type: "moneyline",
+      marketKey: "h2h",
+      bookmakerKey: bookmaker.key,
+      bookmakerTitle: bookmaker.title,
+      line: null,
+      side: homeName,
+      label: `${homeName} gana`,
+      odds: price,
+      impliedProbability: impliedProbabilityFromDecimal(price)
+    };
+  }
+
+  return null;
+}
+
+function buildSpreadCandidates(bookmaker, homeName, awayName, awayLean, homeLean) {
+  const market = bookmaker?.markets?.find(m => m?.key === "spreads");
+  if (!market?.outcomes?.length) return [];
+
+  const candidates = [];
+
+  if (awayLean > homeLean) {
+    const awayOutcome = findOutcomeByTeamName(market.outcomes, awayName);
+    const price = Number(awayOutcome?.price);
+    const point = Number(awayOutcome?.point);
+    if (awayOutcome && !Number.isNaN(point) && price >= 1.5) {
+      candidates.push({
+        type: "spread",
+        marketKey: "spreads",
+        bookmakerKey: bookmaker.key,
+        bookmakerTitle: bookmaker.title,
+        line: point,
+        side: awayName,
+        label: `${awayName} ${point > 0 ? `+${point}` : point}`,
+        odds: price,
+        impliedProbability: impliedProbabilityFromDecimal(price)
+      });
+    }
+  }
+
+  if (homeLean > awayLean) {
+    const homeOutcome = findOutcomeByTeamName(market.outcomes, homeName);
+    const price = Number(homeOutcome?.price);
+    const point = Number(homeOutcome?.point);
+    if (homeOutcome && !Number.isNaN(point) && price >= 1.5) {
+      candidates.push({
+        type: "spread",
+        marketKey: "spreads",
+        bookmakerKey: bookmaker.key,
+        bookmakerTitle: bookmaker.title,
+        line: point,
+        side: homeName,
+        label: `${homeName} ${point > 0 ? `+${point}` : point}`,
+        odds: price,
+        impliedProbability: impliedProbabilityFromDecimal(price)
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function buildTotalCandidates(bookmaker, projectedTotal, projectedDiff, homeName, awayName) {
+  const market = bookmaker?.markets?.find(m => m?.key === "totals");
+  if (!market?.outcomes?.length) return [];
+
+  const outcomes = market.outcomes;
+  const over = outcomes.find(outcome => normalizeString(outcome?.name) === "over");
+  const under = outcomes.find(outcome => normalizeString(outcome?.name) === "under");
+  if (!over || !under) return [];
+
+  const candidates = [];
+
+  const overPoint = Number(over?.point);
+  const underPoint = Number(under?.point);
+  const overPrice = Number(over?.price);
+  const underPrice = Number(under?.price);
+
+  if (!Number.isNaN(overPoint) && overPrice >= 1.5 && projectedTotal !== null && projectedTotal >= overPoint + 4) {
+    candidates.push({
+      type: "total",
+      marketKey: "totals",
+      bookmakerKey: bookmaker.key,
+      bookmakerTitle: bookmaker.title,
+      line: overPoint,
+      side: "Over",
+      label: `Más de ${overPoint}`,
+      odds: overPrice,
+      impliedProbability: impliedProbabilityFromDecimal(overPrice)
+    });
+  }
+
+  if (!Number.isNaN(underPoint) && underPrice >= 1.5 && projectedTotal !== null && projectedTotal <= underPoint - 4) {
+    candidates.push({
+      type: "total",
+      marketKey: "totals",
+      bookmakerKey: bookmaker.key,
+      bookmakerTitle: bookmaker.title,
+      line: underPoint,
+      side: "Under",
+      label: `Menos de ${underPoint}`,
+      odds: underPrice,
+      impliedProbability: impliedProbabilityFromDecimal(underPrice)
+    });
+  }
+
+  if (Math.abs(projectedDiff) < 2 && projectedTotal !== null) {
+    return candidates;
+  }
+
+  return candidates;
+}
+
+function scoreCandidate(candidate, modelEdgeAbs, sourcePriorityIndex) {
+  let score = 0;
+
+  if (candidate.type === "moneyline") score += 24;
+  if (candidate.type === "spread") score += 18;
+  if (candidate.type === "total") score += 16;
+
+  score += Math.min(modelEdgeAbs * 2, 18);
+
+  if (candidate.odds >= 1.5 && candidate.odds < 1.7) score += 3;
+  if (candidate.odds >= 1.7 && candidate.odds <= 2.15) score += 5;
+  if (candidate.odds > 2.15) score += 2;
+
+  score -= Math.min(sourcePriorityIndex, 20);
+
+  return score;
+}
+
+function chooseBestBetCandidate(candidates, modelEdgeAbs) {
+  if (!candidates.length) return null;
+
+  const scored = candidates
+    .map(candidate => ({
+      ...candidate,
+      score: scoreCandidate(candidate, modelEdgeAbs, getBookmakerPriorityIndex(candidate.bookmakerKey))
+    }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (getBookmakerPriorityIndex(a.bookmakerKey) !== getBookmakerPriorityIndex(b.bookmakerKey)) {
+        return getBookmakerPriorityIndex(a.bookmakerKey) - getBookmakerPriorityIndex(b.bookmakerKey);
+      }
+      return b.odds - a.odds;
+    });
+
+  return scored[0];
+}
+
+function classifyBetStrength(edgeGap, candidateOdds, candidateType) {
+  if (edgeGap >= 5 && candidateOdds >= 1.5) {
+    return { level: "Fuerte", stake: "10% del bank" };
+  }
+
+  if (edgeGap >= 3 && candidateOdds >= 1.5) {
+    return { level: "Medio", stake: "7% del bank" };
+  }
+
+  if (edgeGap >= 2 && candidateOdds >= 1.5) {
+    return { level: "Leve", stake: "5% del bank" };
+  }
+
+  return { level: "No bet", stake: "0%" };
+}
+
+function buildFallbackNoBet(reason) {
+  return {
+    selection: null,
+    strength: { level: "No bet", stake: "0%" },
+    reason
+  };
+}
+
+function getBookmakerDisplayName(key, title) {
+  const normalized = String(key || "").toLowerCase();
+  if (normalized === "bet365_uk") return "bet365";
+  return title || key || "Casa";
+}
+
+function renderBetRecommendationBlock(recommendation) {
+  if (!recommendation?.selection) {
+    return `
+      <div class="betting-notes">
+        <h4>No bet</h4>
+        <p>${escapeHtml(recommendation?.reason || "No se encontró una cuota válida con el filtro actual.")}</p>
+      </div>
+    `;
+  }
+
+  const selection = recommendation.selection;
+  const strength = recommendation.strength || { level: "No bet", stake: "0%" };
+
+  return `
+    <div class="betting-notes">
+      <h4>Pick recomendado: ${escapeHtml(selection.label)}</h4>
+      <p>Mercado: ${escapeHtml(selection.type.toUpperCase())} · Casa: ${escapeHtml(getBookmakerDisplayName(selection.bookmakerKey, selection.bookmakerTitle))}</p>
+      <p>Cuota: <strong>${escapeHtml(formatOddsDecimal(selection.odds))}</strong> · Prob. implícita: ${escapeHtml(formatPercent(selection.impliedProbability))}</p>
+      <p>Fuerza: ${escapeHtml(strength.level)} · Stake: ${escapeHtml(strength.stake)}</p>
+      <p style="margin-top:10px;">${escapeHtml(recommendation.reason || "")}</p>
+    </div>
+  `;
+}
+
+function buildRecommendationReason(selection, awayName, homeName, awayEdge, homeEdge) {
+  const edgeGap = Math.abs(awayEdge - homeEdge);
+
+  if (!selection) {
+    return "La ventaja estadística no encontró una cuota mínima de 1.50 que valga la pena jugar.";
+  }
+
+  if (selection.type === "moneyline") {
+    return `${selection.side} es el lado con mejor respaldo estadístico y la cuota todavía entra en el rango jugable. Diferencial del modelo: ${edgeGap} puntos de ventaja.`;
+  }
+
+  if (selection.type === "spread") {
+    return `El lado favorito por el modelo no paga suficiente en ML o rinde mejor en línea. Se propone spread para capturar valor sin salir del sesgo estadístico principal.`;
+  }
+
+  if (selection.type === "total") {
+    return `El cruce deja una lectura más clara en ritmo y producción esperada que en ganador directo, por eso el valor aparece en el total.`;
+  }
+
+  return "Recomendación generada con base en señal estadística y validación de cuota.";
+}
+
+function buildOddsRecommendation({
+  oddsEvent,
+  homeName,
+  awayName,
+  awayEdge,
+  homeEdge,
+  projectedAwayScore,
+  projectedHomeScore
+}) {
+  if (!oddsEvent?.bookmakers?.length) {
+    return buildFallbackNoBet("No se encontraron cuotas disponibles para este partido en The Odds API.");
+  }
+
+  const sortedBookmakers = selectPreferredBookmakers(oddsEvent.bookmakers);
+  const projectedTotal =
+    projectedAwayScore !== null && projectedHomeScore !== null
+      ? projectedAwayScore + projectedHomeScore
+      : null;
+
+  const projectedDiff =
+    projectedAwayScore !== null && projectedHomeScore !== null
+      ? projectedAwayScore - projectedHomeScore
+      : awayEdge - homeEdge;
+
+  const candidates = [];
+
+  for (const bookmaker of sortedBookmakers) {
+    const moneylineCandidate = buildMoneylineCandidate(bookmaker, homeName, awayName, awayEdge, homeEdge);
+    if (moneylineCandidate) candidates.push(moneylineCandidate);
+
+    const spreadCandidates = buildSpreadCandidates(bookmaker, homeName, awayName, awayEdge, homeEdge);
+    if (spreadCandidates.length) candidates.push(...spreadCandidates);
+
+    const totalCandidates = buildTotalCandidates(bookmaker, projectedTotal, projectedDiff, homeName, awayName);
+    if (totalCandidates.length) candidates.push(...totalCandidates);
+  }
+
+  const bestSelection = chooseBestBetCandidate(candidates, Math.abs(awayEdge - homeEdge));
+
+  if (!bestSelection) {
+    return buildFallbackNoBet("No apareció una cuota válida de 1.50 o más en Betano, Novibet, bet365 ni en el resto de casas disponibles.");
+  }
+
+  const strength = classifyBetStrength(Math.abs(awayEdge - homeEdge), bestSelection.odds, bestSelection.type);
+  if (strength.level === "No bet") {
+    return buildFallbackNoBet("La ventaja estadística existe, pero no alcanza para recomendar apuesta con el filtro actual.");
+  }
+
+  return {
+    selection: bestSelection,
+    strength,
+    reason: buildRecommendationReason(bestSelection, awayName, homeName, awayEdge, homeEdge)
+  };
+}
+
 async function loadNBAGames() {
   if (!statusEl || !gamesContainer) return;
 
@@ -929,11 +1369,13 @@ async function analyzeGame(gameId) {
     const [
       standingsRes,
       awayScheduleRes,
-      homeScheduleRes
+      homeScheduleRes,
+      oddsRes
     ] = await Promise.allSettled([
       fetchConferenceStandingsSorted(),
       fetchTeamSchedule(awayTeamId),
-      fetchTeamSchedule(homeTeamId)
+      fetchTeamSchedule(homeTeamId),
+      fetchOddsApiEvents()
     ]);
 
     const standingsData =
@@ -1145,6 +1587,43 @@ async function analyzeGame(gameId) {
       homeVenueDiffNum
     );
 
+    const projectedAwayScore =
+      awayRecentScoredNum !== null && homeRecentAllowedNum !== null
+        ? (awayRecentScoredNum + homeRecentAllowedNum) / 2
+        : awayRecentScoredNum;
+
+    const projectedHomeScore =
+      homeRecentScoredNum !== null && awayRecentAllowedNum !== null
+        ? (homeRecentScoredNum + awayRecentAllowedNum) / 2
+        : homeRecentScoredNum;
+
+    const oddsEvents =
+      oddsRes.status === "fulfilled" && Array.isArray(oddsRes.value)
+        ? oddsRes.value
+        : [];
+
+    const matchingOddsEvent = findMatchingOddsEvent(oddsEvents, homeName, awayName, comp?.date);
+
+    const betRecommendation = buildOddsRecommendation({
+      oddsEvent: matchingOddsEvent,
+      homeName,
+      awayName,
+      awayEdge,
+      homeEdge,
+      projectedAwayScore,
+      projectedHomeScore
+    });
+
+    const projectedTotal =
+      projectedAwayScore !== null && projectedHomeScore !== null
+        ? projectedAwayScore + projectedHomeScore
+        : null;
+
+    const projectedMargin =
+      projectedAwayScore !== null && projectedHomeScore !== null
+        ? projectedAwayScore - projectedHomeScore
+        : null;
+
     analysisPanel.innerHTML = `
       <div class="analysis-box">
         <div class="analysis-header">
@@ -1153,11 +1632,7 @@ async function analyzeGame(gameId) {
           <p class="analysis-date">${escapeHtml(gameDate)}</p>
         </div>
 
-        <div class="betting-notes">
-          <h4>${escapeHtml(edgeText)}</h4>
-          <p>${escapeHtml(autoNote)}</p>
-          <p style="margin-top:10px;"><strong>${escapeHtml(leanText)}</strong></p>
-        </div>
+        ${renderBetRecommendationBlock(betRecommendation)}
 
         <div class="pregame-shell">
           <div class="pregame-compare">
@@ -1231,7 +1706,7 @@ async function analyzeGame(gameId) {
 
             ${buildStatRow(
               escapeHtml(awayStats.adjustedDiffRecent),
-              "Diferencial",
+              "Margen ajustado",
               escapeHtml(homeStats.adjustedDiffRecent),
               adjustedDiffCompare.away,
               adjustedDiffCompare.home
@@ -1243,38 +1718,47 @@ async function analyzeGame(gameId) {
               escapeHtml(homeStats.b2b)
             )}
           </div>
+
+          <div class="pregame-summary">
+            ${buildSingleColumnRow("Lectura del matchup", escapeHtml(edgeText))}
+            ${buildSingleColumnRow("Lean estadístico", escapeHtml(leanText))}
+            ${buildSingleColumnRow("Nota automática", escapeHtml(autoNote))}
+            ${buildSingleColumnRow("Proyección visitante", escapeHtml(formatOneDecimal(projectedAwayScore)))}
+            ${buildSingleColumnRow("Proyección local", escapeHtml(formatOneDecimal(projectedHomeScore)))}
+            ${buildSingleColumnRow("Total proyectado", escapeHtml(formatOneDecimal(projectedTotal)))}
+            ${buildSingleColumnRow("Margen proyectado", escapeHtml(formatSignedOneDecimal(projectedMargin)))}
+          </div>
         </div>
       </div>
     `;
   } catch (error) {
-    console.error("ERROR ANALYSIS:", error);
-    analysisPanel.innerHTML = `
-      <div class="analysis-box">
-        <div class="analysis-header">
-          <h3>Análisis pregame</h3>
-          <p class="analysis-subtitle">No se pudo completar el análisis de este partido.</p>
-        </div>
-        <div class="betting-notes">
-          <p>Revisa la consola del navegador para identificar el error exacto.</p>
-        </div>
-      </div>
-    `;
+    console.error("Pregame error:", error);
+    analysisPanel.innerHTML = "<p>No se pudo cargar el análisis pregame.</p>";
   }
 }
 
-gamesContainer?.addEventListener("click", (e) => {
-  const btn = e.target.closest(".analyze-btn");
-  if (!btn) return;
-  const gameId = btn.dataset.gameId;
-  if (!gameId) return;
-  analyzeGame(gameId);
-});
+if (gamesContainer) {
+  gamesContainer.addEventListener("click", event => {
+    const button = event.target.closest(".analyze-btn");
+    if (!button) return;
+    const gameId = button.dataset.gameId;
+    if (!gameId) return;
+    analyzeGame(gameId);
+  });
+}
 
-modalCloseBtn?.addEventListener("click", closeModal);
-modalCloseBg?.addEventListener("click", closeModal);
+if (modalCloseBtn) {
+  modalCloseBtn.addEventListener("click", closeModal);
+}
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
+if (modalCloseBg) {
+  modalCloseBg.addEventListener("click", closeModal);
+}
+
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    closeModal();
+  }
 });
 
 loadNBAGames();
