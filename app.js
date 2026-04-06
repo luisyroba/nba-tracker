@@ -6,6 +6,8 @@ const modal = document.getElementById("game-modal");
 const modalCloseBtn = document.getElementById("modal-close");
 const modalCloseBg = document.getElementById("modal-close-bg");
 
+let leagueProfilesCache = null;
+
 function openModal() {
   if (!modal) return;
   modal.classList.remove("hidden");
@@ -54,7 +56,9 @@ function getStatValue(entry, statNames) {
   const names = Array.isArray(statNames) ? statNames : [statNames];
 
   for (const name of names) {
-    const stat = entry.stats.find(s => String(s?.name || "").toLowerCase() === String(name).toLowerCase());
+    const stat = entry.stats.find(
+      s => String(s?.name || "").toLowerCase() === String(name).toLowerCase()
+    );
     if (stat?.displayValue !== undefined && stat?.displayValue !== null && stat.displayValue !== "") {
       return stat.displayValue;
     }
@@ -477,8 +481,54 @@ async function fetchTeamSeasonStats(teamId) {
 }
 
 function extractTeamProfile(statsData) {
-  const categories = statsData?.results?.stats?.categories || statsData?.statistics?.splits?.categories || [];
+  const categories =
+    statsData?.results?.stats?.categories ||
+    statsData?.statistics?.splits?.categories ||
+    [];
+
   const allStats = categories.flatMap(cat => cat?.stats || []);
+
+  function pick(names) {
+    for (const name of names) {
+      const found = allStats.find(
+        stat => String(stat?.name || "").toLowerCase() === name.toLowerCase()
+      );
+      if (found) {
+        return found.displayValue ?? found.value ?? null;
+      }
+    }
+    return null;
+  }
+
+  const ppg = toNumber(pick(["pointsPerGame", "avgPoints", "points"]));
+  const oppPpg = toNumber(pick(["pointsAllowedPerGame", "avgPointsAllowed", "oppPointsPerGame"]));
+
+  return { ppg, oppPpg };
+}
+
+function rankTierLabel(rank) {
+  const num = Number(rank);
+  if (Number.isNaN(num) || num <= 0) return "media";
+  if (num <= 10) return "fuerte";
+  if (num <= 20) return "media";
+  return "mala";
+}
+
+function getRankFromValue(value, sortedValues, higherIsBetter = true) {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+
+  const unique = [...new Set(sortedValues.filter(v => v !== null && !Number.isNaN(v)))];
+  unique.sort((a, b) => (higherIsBetter ? b - a : a - b));
+
+  const index = unique.findIndex(v => v === value);
+  return index >= 0 ? index + 1 : null;
+}
+
+function getTeamStyleLabel(offenseRank, defenseRank) {
+  const offenseLabel = rankTierLabel(offenseRank);
+  const defenseLabel = rankTierLabel(defenseRank);
+  return `Ataque ${offenseLabel} | Defensa ${defenseLabel}`;
+}
 
 function buildLeagueProfilesMap(teamProfiles) {
   const offenseValues = teamProfiles
@@ -498,55 +548,33 @@ function buildLeagueProfilesMap(teamProfiles) {
     result[String(team.teamId)] = {
       offenseRank,
       defenseRank,
-      label: getTeamStyleLabel(team.profile, offenseRank, defenseRank)
+      label: getTeamStyleLabel(offenseRank, defenseRank)
     };
   }
 
   return result;
 }
 
-  function pick(names) {
-    for (const name of names) {
-      const found = allStats.find(stat => String(stat?.name || "").toLowerCase() === name.toLowerCase());
-      if (found) {
-        return found.displayValue ?? found.value ?? null;
-      }
-    }
-    return null;
-  }
+async function getLeagueProfilesMap(standingsData) {
+  if (leagueProfilesCache) return leagueProfilesCache;
 
-  const ppg = toNumber(pick(["pointsPerGame", "avgPoints", "points"]));
-  const oppPpg = toNumber(pick(["pointsAllowedPerGame", "avgPointsAllowed", "oppPointsPerGame"]));
+  const leagueTeamIds = standingsData?.children
+    ?.flatMap(group => group?.standings?.entries || [])
+    ?.map(entry => String(entry?.team?.id || ""))
+    ?.filter(Boolean) || [];
 
-  return {
-    ppg,
-    oppPpg
-  };
-}
+  const leagueProfilesRaw = await Promise.all(
+    leagueTeamIds.map(async (teamId) => {
+      const stats = await fetchTeamSeasonStats(teamId);
+      return {
+        teamId,
+        profile: extractTeamProfile(stats)
+      };
+    })
+  );
 
-function rankTierLabel(rank) {
-  const num = Number(rank);
-  if (Number.isNaN(num) || num <= 0) return "media";
-  if (num <= 10) return "fuerte";
-  if (num <= 20) return "media";
-  return "mala";
-}
-
-function getRankFromValue(value, sortedValues, higherIsBetter = true) {
-  if (value === null || value === undefined || Number.isNaN(value)) return null;
-
-  const unique = [...new Set(sortedValues.filter(v => v !== null && !Number.isNaN(v)))];
-
-  unique.sort((a, b) => higherIsBetter ? b - a : a - b);
-
-  const index = unique.findIndex(v => v === value);
-  return index >= 0 ? index + 1 : null;
-}
-
-function getTeamStyleLabel(profile, offenseRank, defenseRank) {
-  const offenseLabel = rankTierLabel(offenseRank);
-  const defenseLabel = rankTierLabel(defenseRank);
-  return `Ataque ${offenseLabel} | Defensa ${defenseLabel}`;
+  leagueProfilesCache = buildLeagueProfilesMap(leagueProfilesRaw);
+  return leagueProfilesCache;
 }
 
 async function loadNBAGames() {
@@ -672,6 +700,7 @@ async function analyzeGame(gameId) {
 
     const summaryData = await summaryRes.json();
     const standingsLookup = buildStandingsLookup(standingsData);
+    const leagueProfilesMap = await getLeagueProfilesMap(standingsData);
 
     const comp = summaryData?.header?.competitions?.[0] || {};
     const competitors = comp?.competitors || [];
@@ -702,13 +731,10 @@ async function analyzeGame(gameId) {
       standingsLookup.byName[homeName] ||
       null;
 
-const [awaySchedule, homeSchedule, awaySeasonStats, homeSeasonStats, allStandingsData] = await Promise.all([
-  fetchTeamSchedule(awayTeamId),
-  fetchTeamSchedule(homeTeamId),
-  fetchTeamSeasonStats(awayTeamId),
-  fetchTeamSeasonStats(homeTeamId),
-  fetchConferenceStandingsSorted()
-]);
+    const [awaySchedule, homeSchedule] = await Promise.all([
+      fetchTeamSchedule(awayTeamId),
+      fetchTeamSchedule(homeTeamId)
+    ]);
 
     const awayRecent5 = getRecentFormFromSchedule(awaySchedule, awayTeamId, comp?.date, 5, standingsLookup);
     const homeRecent5 = getRecentFormFromSchedule(homeSchedule, homeTeamId, comp?.date, 5, standingsLookup);
@@ -729,36 +755,17 @@ const [awaySchedule, homeSchedule, awaySeasonStats, homeSeasonStats, allStanding
       homeEntry?.clincher || null
     );
 
-    const awayProfile = extractTeamProfile(awaySeasonStats);
-    const homeProfile = extractTeamProfile(homeSeasonStats);
-    const leagueTeamIds = allStandingsData?.children
-  ?.flatMap(group => group?.standings?.entries || [])
-  ?.map(entry => String(entry?.team?.id || ""))
-  ?.filter(Boolean) || [];
-
-const leagueProfilesRaw = await Promise.all(
-  leagueTeamIds.map(async (teamId) => {
-    const stats = await fetchTeamSeasonStats(teamId);
-    return {
-      teamId,
-      profile: extractTeamProfile(stats)
+    const awayProfileRanked = leagueProfilesMap[String(awayTeamId)] || {
+      offenseRank: null,
+      defenseRank: null,
+      label: "Ataque medio | Defensa media"
     };
-  })
-);
 
-const leagueProfilesMap = buildLeagueProfilesMap(leagueProfilesRaw);
-
-const awayProfileRanked = leagueProfilesMap[String(awayTeamId)] || {
-  offenseRank: null,
-  defenseRank: null,
-  label: "Ataque medio | Defensa media"
-};
-
-const homeProfileRanked = leagueProfilesMap[String(homeTeamId)] || {
-  offenseRank: null,
-  defenseRank: null,
-  label: "Ataque medio | Defensa media"
-};
+    const homeProfileRanked = leagueProfilesMap[String(homeTeamId)] || {
+      offenseRank: null,
+      defenseRank: null,
+      label: "Ataque medio | Defensa media"
+    };
 
     const awayStats = {
       conference: awayEntry?.conference || "Pendiente",
@@ -955,17 +962,17 @@ const homeProfileRanked = leagueProfilesMap[String(homeTeamId)] || {
 
             ${buildStatRow(
               escapeHtml(awayStats.rivalQuality),
-              "Calidad Rival",
+              "Calidad rival",
               escapeHtml(homeStats.rivalQuality)
             )}
 
             ${buildStatRow(
-  escapeHtml(awayStats.venueSplit),
-  "Forma fuera/casa",
-  escapeHtml(homeStats.venueSplit),
-  venueCompare.away,
-  venueCompare.home
-)}
+              escapeHtml(awayStats.venueSplit),
+              "Forma fuera/casa",
+              escapeHtml(homeStats.venueSplit),
+              venueCompare.away,
+              venueCompare.home
+            )}
 
             ${buildStatRow(
               escapeHtml(awayStats.teamStyle),
@@ -999,7 +1006,7 @@ const homeProfileRanked = leagueProfilesMap[String(homeTeamId)] || {
 
             ${buildStatRow(
               escapeHtml(awayStats.b2b),
-              "B2B,
+              "B2B",
               escapeHtml(homeStats.b2b)
             )}
           </div>
