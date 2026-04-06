@@ -390,18 +390,27 @@ function buildStandingsLookup(standingsData) {
       const teamText = `${team?.displayName || ""} ${team?.abbreviation || ""}`.toLowerCase();
       const combinedText = `${statsText} ${noteText} ${teamText}`;
 
-      let clincher = null;
-      if (combinedText.includes("eliminated") || combinedText.includes("e --")) {
-        clincher = "Eliminado";
-      } else if (combinedText.includes("clinched play-in") || combinedText.includes("pb --")) {
-        clincher = "Play-in asegurado";
-      } else if (
-        combinedText.includes("clinched playoff") ||
-        combinedText.includes("x --") ||
-        combinedText.includes("y --")
-      ) {
-        clincher = "Clasificado a playoffs";
-      }
+let clincher = null;
+
+if (
+  combinedText.includes("eliminated") ||
+  combinedText.includes("e --")
+) {
+  clincher = "Eliminado";
+} else if (
+  combinedText.includes("clinched play-in") ||
+  combinedText.includes("pb --")
+) {
+  clincher = "Play-in asegurado";
+} else if (
+  combinedText.includes("clinched playoff") ||
+  combinedText.includes("clinched playoff berth") ||
+  combinedText.includes("x --") ||
+  combinedText.includes("y --") ||
+  combinedText.includes("z --")
+) {
+  clincher = "Clasificado a play-offs";
+}
 
       return {
         rawEntry: entry,
