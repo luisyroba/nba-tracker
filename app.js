@@ -905,13 +905,6 @@ function getSuggestedAlternateTotal(mainTotalPoint, projectedTotal, side = "over
   return target > mainTotalPoint ? target : null;
 }
 
-function getLineupStatusScore(label) {
-  const normalized = normalizeString(label);
-  if (normalized.includes("confirmed")) return 1;
-  if (normalized.includes("expected")) return 0.5;
-  return 0;
-}
-
 function deriveInjurySeverity(statusText) {
   const text = normalizeString(statusText);
   if (!text) return 0;
@@ -951,7 +944,7 @@ function summarizeAvailability(availability) {
   const lineupLabel = availability.lineupConfirmed
     ? "Confirmado"
     : availability.lineupExpected
-      ? "Proyectado"
+      ? "Probable"
       : "Sin confirmar";
 
   const parts = [];
@@ -990,30 +983,64 @@ async function fetchEspnInjuriesPage(teamAbbr = "") {
 }
 
 function extractEspnTeamInjuries(html, teamName, teamAbbr) {
-  const normalizedTeamName = normalizeString(teamName);
-  const normalizedTeamAbbr = normalizeString(teamAbbr);
   const text = String(html || "");
-
   if (!text) return [];
 
-  const rows = [];
-  const playerPattern = /"name":"([^"]+)".{0,220}?"position":"?([^",}]*)"?[\s\S]{0,260}?"status":"([^"]+)"/gi;
-  let match;
+  const normalizedTeamName = normalizeString(teamName);
+  const normalizedTeamAbbr = normalizeString(teamAbbr);
 
-  while ((match = playerPattern.exec(text)) !== null) {
-    const player = match[1];
-    const position = match[2];
-    const status = match[3];
+  const cleaned = text
+    .replace(/\r/g, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "\n")
+    .replace(/<style[\s\S]*?<\/style>/gi, "\n")
+    .replace(/<[^>]+>/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 
-    rows.push({ player, position, status });
+  const lines = cleaned.split("\n").map(line => line.trim()).filter(Boolean);
+
+  let startIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const current = normalizeString(lines[i]);
+    if (
+      current === normalizedTeamName ||
+      current.includes(normalizedTeamName) ||
+      (normalizedTeamAbbr && current.includes(normalizedTeamAbbr))
+    ) {
+      startIndex = i;
+      break;
+    }
   }
 
-  const filtered = rows.filter(row => {
-    const rowText = normalizeString(`${row.player} ${row.position} ${row.status} ${teamName} ${teamAbbr}`);
-    return normalizedTeamName ? rowText.includes(normalizedTeamName) || rowText.includes(normalizedTeamAbbr) : true;
-  });
+  if (startIndex === -1) return [];
 
-  return filtered.slice(0, 8);
+  const block = lines.slice(startIndex, startIndex + 80);
+  const rows = [];
+
+  for (let i = 0; i < block.length; i++) {
+    const line = block[i];
+    const next1 = block[i + 1] || "";
+    const next2 = block[i + 2] || "";
+    const next3 = block[i + 3] || "";
+
+    const nameLooksValid = /^[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+)+$/.test(line);
+    const posLooksValid = /^(PG|SG|SF|PF|C|G|F)$/i.test(next1);
+    const statusLooksValid = /(Out|Questionable|Doubtful|Probable|Day-To-Day|Game Time Decision|GTD)/i.test(next3);
+
+    if (nameLooksValid && posLooksValid && statusLooksValid) {
+      rows.push({
+        player: line,
+        position: next1,
+        status: next3
+      });
+    }
+  }
+
+  const unique = rows.filter((item, index, arr) =>
+    arr.findIndex(x => normalizeString(x.player) === normalizeString(item.player)) === index
+  );
+
+  return unique.slice(0, 8);
 }
 
 async function fetchRotowireLineupsHtml(dateMode = "today") {
@@ -1033,9 +1060,6 @@ async function fetchRotowireLineupsHtml(dateMode = "today") {
 
 function extractTeamLineupInfoFromHtml(html, teamName, teamAbbr) {
   const safeHtml = String(html || "");
-  const normalizedTeamName = normalizeString(teamName);
-  const normalizedTeamAbbr = normalizeString(teamAbbr);
-
   if (!safeHtml) {
     return {
       lineupConfirmed: false,
@@ -1045,19 +1069,33 @@ function extractTeamLineupInfoFromHtml(html, teamName, teamAbbr) {
     };
   }
 
+  const normalizedTeamName = normalizeString(teamName);
+  const normalizedTeamAbbr = normalizeString(teamAbbr);
+
   const text = safeHtml
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ");
+    .replace(/\r/g, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "\n")
+    .replace(/<style[\s\S]*?<\/style>/gi, "\n")
+    .replace(/<[^>]+>/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 
-  const normalizedText = normalizeString(text);
+  const lines = text.split("\n").map(line => line.trim()).filter(Boolean);
 
-  const foundTeam = normalizedTeamName && (
-    normalizedText.includes(normalizedTeamName) || normalizedText.includes(normalizedTeamAbbr)
-  );
+  let teamIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const current = normalizeString(lines[i]);
+    if (
+      current === normalizedTeamName ||
+      current === normalizedTeamAbbr ||
+      current.includes(normalizedTeamName)
+    ) {
+      teamIndex = i;
+      break;
+    }
+  }
 
-  if (!foundTeam) {
+  if (teamIndex === -1) {
     return {
       lineupConfirmed: false,
       lineupExpected: false,
@@ -1066,24 +1104,70 @@ function extractTeamLineupInfoFromHtml(html, teamName, teamAbbr) {
     };
   }
 
-  const lineupConfirmed = normalizedText.includes("confirmed lineup");
-  const lineupExpected = lineupConfirmed || normalizedText.includes("expected lineup");
+  const windowLines = lines.slice(teamIndex, teamIndex + 90);
+  const normalizedWindow = normalizeString(windowLines.join(" | "));
 
-  const injuryMatches = [];
-  const mayNotPlayPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z'.-]+)+)\s+(Out|Questionable|Doubtful|Game Time Decision|Day-To-Day)/g;
-  let match;
-  while ((match = mayNotPlayPattern.exec(text)) !== null) {
-    injuryMatches.push({
-      player: match[1],
-      status: match[2]
-    });
+  const lineupConfirmed = normalizedWindow.includes("confirmed lineup");
+  const lineupExpected = lineupConfirmed || normalizedWindow.includes("expected lineup");
+
+  const starters = [];
+  const injuries = [];
+
+  let inLineupBlock = false;
+  let inInjuryBlock = false;
+
+  for (let i = 0; i < windowLines.length; i++) {
+    const line = windowLines[i];
+    const norm = normalizeString(line);
+
+    if (norm.includes("expected lineup") || norm.includes("confirmed lineup")) {
+      inLineupBlock = true;
+      inInjuryBlock = false;
+      continue;
+    }
+
+    if (norm.includes("may not play")) {
+      inLineupBlock = false;
+      inInjuryBlock = true;
+      continue;
+    }
+
+    if (inLineupBlock && ["pg", "sg", "sf", "pf", "c"].includes(norm)) {
+      const next = windowLines[i + 1] || "";
+      const nextNorm = normalizeString(next);
+      if (next && !["pg", "sg", "sf", "pf", "c"].includes(nextNorm)) {
+        starters.push({
+          position: line.toUpperCase(),
+          player: next
+        });
+      }
+    }
+
+    if (inInjuryBlock) {
+      const match = line.match(/^([A-Z]{1,3})\s+(.+?)\s+(Out|Questionable|Doubtful|Probable|Game Time Decision|Day-To-Day|Ques|Doubt|Prob|GTD)$/i);
+      if (match) {
+        injuries.push({
+          position: match[1],
+          player: match[2],
+          status: match[3]
+        });
+      }
+    }
   }
+
+  const uniqueStarters = starters.filter((item, index, arr) =>
+    arr.findIndex(x => normalizeString(`${x.position}-${x.player}`) === normalizeString(`${item.position}-${item.player}`)) === index
+  );
+
+  const uniqueInjuries = injuries.filter((item, index, arr) =>
+    arr.findIndex(x => normalizeString(x.player) === normalizeString(item.player)) === index
+  );
 
   return {
     lineupConfirmed,
     lineupExpected,
-    starters: [],
-    injuries: injuryMatches.slice(0, 6)
+    starters: uniqueStarters.slice(0, 5),
+    injuries: uniqueInjuries.slice(0, 8)
   };
 }
 
@@ -1106,7 +1190,7 @@ async function getTeamAvailability(teamName, teamAbbr) {
     if (!exists) {
       mergedInjuries.push({
         player: item.player,
-        position: "",
+        position: item.position || "",
         status: item.status
       });
     }
@@ -1115,6 +1199,7 @@ async function getTeamAvailability(teamName, teamAbbr) {
   return {
     lineupConfirmed: Boolean(lineupSource.lineupConfirmed),
     lineupExpected: Boolean(lineupSource.lineupExpected),
+    starters: lineupSource.starters || [],
     injuries: mergedInjuries.slice(0, 8)
   };
 }
@@ -1125,43 +1210,529 @@ function renderAvailabilityInfo(summary) {
 }
 
 function renderInjuryList(summary, teamName) {
-  if (!summary?.injuries?.length) {
-    return `<p class="mini-note">${escapeHtml(teamName)}: sin bajas relevantes detectadas.</p>`;
-  }
+  const starters = Array.isArray(summary?.starters) ? summary.starters : [];
+  const injuries = Array.isArray(summary?.injuries) ? summary.injuries : [];
 
   return `
-    <div class="injury-mini-list">
-      ${summary.injuries.slice(0, 5).map(item => `
-        <p class="mini-note">${escapeHtml(teamName)} · ${escapeHtml(item.player)}: ${escapeHtml(item.status || "Pendiente")}</p>
-      `).join("")}
+    <div class="availability-card">
+      <div class="availability-card-head">
+        <h5>${escapeHtml(teamName)}</h5>
+        <span class="availability-badge ${
+          summary?.lineupConfirmed
+            ? "is-confirmed"
+            : summary?.lineupExpected
+              ? "is-projected"
+              : "is-unknown"
+        }">
+          ${
+            summary?.lineupConfirmed
+              ? "Lineup confirmado"
+              : summary?.lineupExpected
+                ? "Lineup probable"
+                : "Sin confirmar"
+          }
+        </span>
+      </div>
+
+      <div class="availability-section">
+        <div class="availability-label">Quinteto esperado</div>
+        ${
+          starters.length
+            ? `<div class="starter-list">
+                ${starters.map(item => `
+                  <div class="starter-item">
+                    <span class="starter-pos">${escapeHtml(item.position || "-")}</span>
+                    <span class="starter-player">${escapeHtml(item.player || "Pendiente")}</span>
+                  </div>
+                `).join("")}
+              </div>`
+            : `<p class="availability-empty">No se detectó un quinteto probable para este equipo.</p>`
+        }
+      </div>
+
+      <div class="availability-section">
+        <div class="availability-label">Bajas / dudas</div>
+        ${
+          injuries.length
+            ? `<div class="injury-list">
+                ${injuries.slice(0, 6).map(item => `
+                  <div class="injury-item">
+                    <span class="injury-player">${escapeHtml(item.player || "Jugador")}</span>
+                    <span class="injury-status">${escapeHtml(item.status || "Pendiente")}</span>
+                  </div>
+                `).join("")}
+              </div>`
+            : `<p class="availability-empty">Sin bajas relevantes detectadas.</p>`
+        }
+      </div>
     </div>
   `;
 }
 
-function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanText, availabilityNote = "") {
+function renderBetRecommendationBlock(
+  recommendation,
+  edgeText,
+  autoNote,
+  leanText,
+  availabilityNote = "",
+  awayAvailability = null,
+  awayName = "",
+  homeAvailability = null,
+  homeName = ""
+) {
+  const selection = recommendation?.selection || null;
+  const strengthLevel = recommendation?.strength?.level || "No bet";
+  const strengthClass =
+    strengthLevel === "Fuerte"
+      ? "is-strong"
+      : strengthLevel === "Medio"
+        ? "is-medium"
+        : strengthLevel === "Leve"
+          ? "is-light"
+          : "is-nobet";
+
+  const recommendationHtml = selection
+    ? `
+      <div class="summary-pick-card">
+        <div class="summary-pick-top">
+          <div>
+            <div class="summary-label">Pick recomendado</div>
+            <div class="summary-pick-main">${escapeHtml(selection.label)}</div>
+          </div>
+          <span class="strength-pill ${strengthClass}">${escapeHtml(strengthLevel)}</span>
+        </div>
+
+        <div class="summary-pick-grid">
+          <div class="summary-mini-stat">
+            <span class="summary-mini-label">Mercado</span>
+            <strong>${escapeHtml(selection.marketLabel || selection.type.toUpperCase())}</strong>
+          </div>
+          <div class="summary-mini-stat">
+            <span class="summary-mini-label">Casa</span>
+            <strong>${escapeHtml(getBookmakerDisplayName(selection.bookmakerKey, selection.bookmakerTitle))}</strong>
+          </div>
+          <div class="summary-mini-stat">
+            <span class="summary-mini-label">Cuota</span>
+            <strong>${escapeHtml(formatOddsDecimal(selection.odds))}</strong>
+          </div>
+          <div class="summary-mini-stat">
+            <span class="summary-mini-label">Stake</span>
+            <strong>${escapeHtml(recommendation?.strength?.stake || "0%")}</strong>
+          </div>
+        </div>
+
+        <p class="summary-reason">${escapeHtml(recommendation.reason || "")}</p>
+
+        ${
+          selection.isEstimated
+            ? `<p class="summary-footnote">Línea estimada desde mercado principal: ${escapeHtml(selection.derivedFromLabel || "Sí")}.</p>`
+            : ""
+        }
+      </div>
+    `
+    : `
+      <div class="summary-pick-card is-empty">
+        <div class="summary-pick-top">
+          <div>
+            <div class="summary-label">Pick recomendado</div>
+            <div class="summary-pick-main">No bet</div>
+          </div>
+          <span class="strength-pill is-nobet">Sin valor</span>
+        </div>
+        <p class="summary-reason">${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadística.")}</p>
+      </div>
+    `;
+
   return `
-    <div class="betting-notes">
-      <h4>${escapeHtml(edgeText)}</h4>
-      <p>${escapeHtml(autoNote)}</p>
-      <p style="margin-top:10px;"><strong>${escapeHtml(leanText)}</strong></p>
-      ${availabilityNote ? `<p style="margin-top:10px;">${escapeHtml(availabilityNote)}</p>` : ""}
-      ${
-        recommendation?.selection
-          ? `
-            <hr style="margin:12px 0; opacity:.15;">
-            <p><strong>Pick recomendado:</strong> ${escapeHtml(recommendation.selection.label)}</p>
-            <p>Mercado: ${escapeHtml(recommendation.selection.marketLabel || recommendation.selection.type.toUpperCase())} · Casa: ${escapeHtml(getBookmakerDisplayName(recommendation.selection.bookmakerKey, recommendation.selection.bookmakerTitle))}</p>
-            <p>Cuota: <strong>${escapeHtml(formatOddsDecimal(recommendation.selection.odds))}</strong> · Prob. implícita: ${escapeHtml(formatPercent(recommendation.selection.impliedProbability))}</p>
-            ${recommendation.selection.isEstimated ? `<p>Línea estimada basada en mercado principal: ${escapeHtml(recommendation.selection.derivedFromLabel || "Sí")}</p>` : ""}
-            <p>Fuerza: ${escapeHtml(recommendation.strength.level)} · Stake: ${escapeHtml(recommendation.strength.stake)}</p>
-            <p style="margin-top:10px;">${escapeHtml(recommendation.reason || "")}</p>
-          `
-          : `
-            <hr style="margin:12px 0; opacity:.15;">
-            <p><strong>Pick recomendado:</strong> No bet</p>
-            <p>${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadística.")}</p>
-          `
-      }
+    <div class="pregame-summary">
+      <style>
+        .pregame-summary {
+          margin: 0 0 16px;
+          display: grid;
+          gap: 14px;
+        }
+
+        .summary-hero {
+          background: linear-gradient(180deg, rgba(21,28,38,.98) 0%, rgba(14,20,28,.98) 100%);
+          border: 1px solid rgba(88, 166, 255, 0.14);
+          border-radius: 18px;
+          padding: 16px;
+          box-shadow: 0 14px 34px rgba(0,0,0,.24);
+        }
+
+        .summary-hero-top {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: flex-start;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+        }
+
+        .summary-title {
+          display: grid;
+          gap: 6px;
+        }
+
+        .summary-title .summary-kicker {
+          font-size: 11px;
+          letter-spacing: .08em;
+          text-transform: uppercase;
+          color: rgba(143, 211, 255, .82);
+        }
+
+        .summary-title h4 {
+          margin: 0;
+          font-size: 20px;
+          line-height: 1.15;
+          color: #f3f7fb;
+        }
+
+        .summary-title p {
+          margin: 0;
+          color: rgba(214, 226, 238, .82);
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .lean-pill {
+          display: inline-flex;
+          align-items: center;
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: rgba(55, 179, 126, .14);
+          border: 1px solid rgba(55, 179, 126, .28);
+          color: #b9f5d6;
+          font-weight: 700;
+          font-size: 12px;
+          white-space: nowrap;
+        }
+
+        .summary-note {
+          margin: 0;
+          color: rgba(223, 231, 240, .9);
+          font-size: 14px;
+          line-height: 1.6;
+        }
+
+        .summary-pick-card {
+          background: rgba(15, 23, 33, .92);
+          border: 1px solid rgba(109, 168, 255, .18);
+          border-radius: 16px;
+          padding: 14px;
+        }
+
+        .summary-pick-card.is-empty {
+          border-color: rgba(255, 184, 77, .18);
+          background: rgba(28, 24, 16, .88);
+        }
+
+        .summary-pick-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .summary-label {
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: .08em;
+          color: rgba(154, 176, 198, .78);
+          margin-bottom: 4px;
+        }
+
+        .summary-pick-main {
+          font-size: 20px;
+          line-height: 1.2;
+          color: #ffffff;
+          font-weight: 800;
+        }
+
+        .strength-pill {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 78px;
+          padding: 7px 10px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 800;
+          border: 1px solid transparent;
+        }
+
+        .strength-pill.is-strong {
+          background: rgba(52, 211, 153, .15);
+          color: #9af0ca;
+          border-color: rgba(52, 211, 153, .3);
+        }
+
+        .strength-pill.is-medium {
+          background: rgba(96, 165, 250, .15);
+          color: #b4d6ff;
+          border-color: rgba(96, 165, 250, .3);
+        }
+
+        .strength-pill.is-light {
+          background: rgba(250, 204, 21, .14);
+          color: #ffe59a;
+          border-color: rgba(250, 204, 21, .28);
+        }
+
+        .strength-pill.is-nobet {
+          background: rgba(148, 163, 184, .14);
+          color: #d0dae6;
+          border-color: rgba(148, 163, 184, .24);
+        }
+
+        .summary-pick-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .summary-mini-stat {
+          background: rgba(255,255,255,.03);
+          border: 1px solid rgba(255,255,255,.05);
+          border-radius: 12px;
+          padding: 10px 11px;
+          display: grid;
+          gap: 4px;
+        }
+
+        .summary-mini-label {
+          font-size: 11px;
+          color: rgba(162, 176, 191, .78);
+          text-transform: uppercase;
+          letter-spacing: .07em;
+        }
+
+        .summary-mini-stat strong {
+          font-size: 14px;
+          color: #f5f9ff;
+        }
+
+        .summary-reason,
+        .summary-footnote {
+          margin: 0;
+          line-height: 1.6;
+        }
+
+        .summary-reason {
+          color: rgba(226, 233, 241, .92);
+          font-size: 14px;
+        }
+
+        .summary-footnote {
+          margin-top: 8px;
+          color: rgba(167, 183, 201, .78);
+          font-size: 12px;
+        }
+
+        .availability-overview {
+          background: rgba(12, 18, 27, .92);
+          border: 1px solid rgba(85, 125, 177, .18);
+          border-radius: 16px;
+          padding: 14px;
+        }
+
+        .availability-overview-head {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+        }
+
+        .availability-overview-head h5 {
+          margin: 0;
+          color: #eef5fc;
+          font-size: 15px;
+        }
+
+        .availability-overview-head p {
+          margin: 0;
+          color: rgba(167, 183, 201, .82);
+          font-size: 12px;
+        }
+
+        .availability-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .availability-card {
+          background: rgba(255,255,255,.03);
+          border: 1px solid rgba(255,255,255,.06);
+          border-radius: 14px;
+          padding: 12px;
+          display: grid;
+          gap: 12px;
+        }
+
+        .availability-card-head {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+
+        .availability-card-head h5 {
+          margin: 0;
+          color: #f4f8fc;
+          font-size: 15px;
+        }
+
+        .availability-badge {
+          display: inline-flex;
+          align-items: center;
+          padding: 6px 10px;
+          border-radius: 999px;
+          font-size: 11px;
+          font-weight: 700;
+          border: 1px solid transparent;
+        }
+
+        .availability-badge.is-confirmed {
+          background: rgba(52, 211, 153, .14);
+          color: #9af0ca;
+          border-color: rgba(52, 211, 153, .28);
+        }
+
+        .availability-badge.is-projected {
+          background: rgba(96, 165, 250, .14);
+          color: #b8d7ff;
+          border-color: rgba(96, 165, 250, .28);
+        }
+
+        .availability-badge.is-unknown {
+          background: rgba(148, 163, 184, .14);
+          color: #d5dee8;
+          border-color: rgba(148, 163, 184, .22);
+        }
+
+        .availability-section {
+          display: grid;
+          gap: 8px;
+        }
+
+        .availability-label {
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: .08em;
+          color: rgba(158, 177, 196, .76);
+        }
+
+        .starter-list,
+        .injury-list {
+          display: grid;
+          gap: 8px;
+        }
+
+        .starter-item,
+        .injury-item {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          align-items: center;
+          padding: 9px 10px;
+          border-radius: 10px;
+          background: rgba(255,255,255,.035);
+          border: 1px solid rgba(255,255,255,.04);
+        }
+
+        .starter-pos {
+          min-width: 34px;
+          text-align: center;
+          font-size: 11px;
+          font-weight: 800;
+          color: #9bd0ff;
+          background: rgba(86, 156, 214, .12);
+          border: 1px solid rgba(86, 156, 214, .22);
+          border-radius: 999px;
+          padding: 5px 7px;
+        }
+
+        .starter-player,
+        .injury-player {
+          flex: 1;
+          color: #eff5fb;
+          font-size: 13px;
+        }
+
+        .injury-status {
+          font-size: 11px;
+          font-weight: 700;
+          color: #ffd89a;
+          background: rgba(245, 158, 11, .12);
+          border: 1px solid rgba(245, 158, 11, .24);
+          border-radius: 999px;
+          padding: 5px 8px;
+          white-space: nowrap;
+        }
+
+        .availability-empty {
+          margin: 0;
+          color: rgba(164, 181, 198, .78);
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        @media (max-width: 760px) {
+          .summary-pick-grid,
+          .availability-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .summary-pick-top,
+          .summary-hero-top,
+          .availability-card-head {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .starter-item,
+          .injury-item {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+        }
+      </style>
+
+      <div class="summary-hero">
+        <div class="summary-hero-top">
+          <div class="summary-title">
+            <span class="summary-kicker">Resumen del matchup</span>
+            <h4>${escapeHtml(edgeText)}</h4>
+            <p>${escapeHtml(leanText)}</p>
+          </div>
+          <span class="lean-pill">${escapeHtml(recommendation?.selection ? "Pick activo" : "Lectura prudente")}</span>
+        </div>
+
+        <p class="summary-note">${escapeHtml(autoNote)}</p>
+        ${availabilityNote ? `<p class="summary-footnote">${escapeHtml(availabilityNote)}</p>` : ""}
+      </div>
+
+      ${recommendationHtml}
+
+      <div class="availability-overview">
+        <div class="availability-overview-head">
+          <div>
+            <h5>Lineups y disponibilidad</h5>
+            <p>Quintetos probables, confirmación y bajas detectadas.</p>
+          </div>
+        </div>
+
+        <div class="availability-grid">
+          ${renderInjuryList(awayAvailability, awayName)}
+          ${renderInjuryList(homeAvailability, homeName)}
+        </div>
+      </div>
     </div>
   `;
 }
@@ -1801,7 +2372,7 @@ async function analyzeGame(gameId) {
       autoNote += " La disponibilidad de jugadores ajusta la confianza del pick.";
     }
 
-    const availabilityNote = `${awayName}: ${awayStats.availability} · ${homeName}: ${homeStats.availability}`;
+    const availabilityNote = `Disponibilidad: ${awayName} (${awayStats.availability}) vs ${homeName} (${homeStats.availability}).`;
 
     const recordCompare = compareNumbersHigherBetter(awayRecordParsed?.pct ?? null, homeRecordParsed?.pct ?? null);
     const recentScoredCompare = compareNumbersHigherBetter(awayRecentScoredNum, homeRecentScoredNum);
@@ -1856,7 +2427,17 @@ async function analyzeGame(gameId) {
           <p class="analysis-date">${escapeHtml(gameDate)}</p>
         </div>
 
-        ${renderBetRecommendationBlock(betRecommendation, edgeText, autoNote, leanText, availabilityNote)}
+        ${renderBetRecommendationBlock(
+          betRecommendation,
+          edgeText,
+          autoNote,
+          leanText,
+          availabilityNote,
+          awayAvailability,
+          awayName,
+          homeAvailability,
+          homeName
+        )}
 
         <div class="pregame-shell">
           <div class="pregame-compare">
@@ -1907,27 +2488,6 @@ async function analyzeGame(gameId) {
               adjustedDiffCompare.home
             )}
             ${buildStatRow(escapeHtml(awayStats.b2b), "B2B", escapeHtml(homeStats.b2b))}
-            ${buildStatRow(escapeHtml(awayStats.availability), "Lineup / bajas", escapeHtml(homeStats.availability))}
-            ${buildStatRow(
-              escapeHtml(formatOneDecimal(projectedAwayScore)),
-              "Proy. puntos equipo",
-              escapeHtml(formatOneDecimal(projectedHomeScore))
-            )}
-            ${buildStatRow(
-              escapeHtml(projectedSpread !== null ? formatSignedOneDecimal(-projectedSpread) : "Pendiente"),
-              "Proyección spread",
-              escapeHtml(projectedSpread !== null ? formatSignedOneDecimal(projectedSpread) : "Pendiente")
-            )}
-            ${buildStatRow(
-              escapeHtml(projectedTotal !== null ? formatOneDecimal(projectedTotal) : "Pendiente"),
-              "Proyección total",
-              escapeHtml(projectedTotal !== null ? formatOneDecimal(projectedTotal) : "Pendiente")
-            )}
-          </div>
-
-          <div style="margin-top:14px;">
-            ${renderInjuryList(awayAvailability, awayName)}
-            ${renderInjuryList(homeAvailability, homeName)}
           </div>
         </div>
       </div>
