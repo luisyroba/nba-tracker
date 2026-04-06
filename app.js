@@ -142,7 +142,7 @@ function getOpponentStrengthLabel(pct) {
   if (pct === null || pct === undefined || Number.isNaN(pct)) return "Pendiente";
   if (pct >= 0.60) return "Rivales fuertes";
   if (pct >= 0.45) return "Rivales medios";
-  return "Rivales dÃ©biles";
+  return "Rivales dÃƒÂ©biles";
 }
 
 function getOpponentWeight(pct) {
@@ -164,7 +164,7 @@ function renderFormChips(games) {
       ${ordered.map(game => `
         <span
           class="form-chip ${game.won ? "win" : "loss"}"
-          title="${escapeHtml(`${game.won ? "GanÃ³" : "PerdiÃ³"} vs ${game.opponentName} (${game.teamScore}-${game.opponentScore})`)}"
+          title="${escapeHtml(`${game.won ? "GanÃƒÂ³" : "PerdiÃƒÂ³"} vs ${game.opponentName} (${game.teamScore}-${game.opponentScore})`)}"
         >
           ${game.won ? "G" : "P"}
         </span>
@@ -319,9 +319,9 @@ function getB2BStatus(data, teamId, gameDate) {
   }
 
   if (diffHours <= 30) {
-    if (previousGame.homeAway === "home") return { isB2B: true, label: "SÃ­", detail: "B2B en casa" };
-    if (previousGame.homeAway === "away") return { isB2B: true, label: "SÃ­", detail: "B2B con viaje" };
-    return { isB2B: true, label: "SÃ­", detail: "B2B" };
+    if (previousGame.homeAway === "home") return { isB2B: true, label: "SÃƒÂ­", detail: "B2B en casa" };
+    if (previousGame.homeAway === "away") return { isB2B: true, label: "SÃƒÂ­", detail: "B2B con viaje" };
+    return { isB2B: true, label: "SÃƒÂ­", detail: "B2B" };
   }
 
   return { isB2B: false, label: "No", detail: "Descanso normal" };
@@ -958,7 +958,7 @@ function summarizeAvailability(availability) {
   }
 
   return {
-    display: parts.join(" Â· "),
+    display: parts.join(" Ã‚Â· "),
     scorePenalty: Number(scorePenalty.toFixed(2)),
     lineupLabel,
     injuryCount: availability.injuries?.length || 0
@@ -1192,7 +1192,7 @@ function renderTeamAvailabilityCard(teamName, availability) {
         ${
           starters.length
             ? starters.map(item => `
-                <p style="margin:0 0 4px 0; opacity:.92;">${escapeHtml(item.position)} Â· ${escapeHtml(item.player)}</p>
+                <p style="margin:0 0 4px 0; opacity:.92;">${escapeHtml(item.position)} Ã‚Â· ${escapeHtml(item.player)}</p>
               `).join("")
             : `<p style="margin:0; opacity:.75;">No detectado.</p>`
         }
@@ -1235,16 +1235,16 @@ function renderBetRecommendationBlock(
           ? `
             <hr style="margin:12px 0; opacity:.15;">
             <p><strong>Pick recomendado:</strong> ${escapeHtml(recommendation.selection.label)}</p>
-            <p>Mercado: ${escapeHtml(recommendation.selection.marketLabel || recommendation.selection.type.toUpperCase())} Â· Casa: ${escapeHtml(getBookmakerDisplayName(recommendation.selection.bookmakerKey, recommendation.selection.bookmakerTitle))}</p>
-            <p>Cuota: <strong>${escapeHtml(formatOddsDecimal(recommendation.selection.odds))}</strong> Â· Prob. implÃ­cita: ${escapeHtml(formatPercent(recommendation.selection.impliedProbability))}</p>
-            ${recommendation.selection.isEstimated ? `<p>LÃ­nea estimada basada en mercado principal: ${escapeHtml(recommendation.selection.derivedFromLabel || "SÃ­")}</p>` : ""}
-            <p>Fuerza: ${escapeHtml(recommendation.strength.level)} Â· Stake: ${escapeHtml(recommendation.strength.stake)}</p>
+            <p>Mercado: ${escapeHtml(recommendation.selection.marketLabel || recommendation.selection.type.toUpperCase())} Ã‚Â· Casa: ${escapeHtml(getBookmakerDisplayName(recommendation.selection.bookmakerKey, recommendation.selection.bookmakerTitle))}</p>
+            <p>Cuota: <strong>${escapeHtml(formatOddsDecimal(recommendation.selection.odds))}</strong> Ã‚Â· Prob. implÃƒÂ­cita: ${escapeHtml(formatPercent(recommendation.selection.impliedProbability))}</p>
+            ${recommendation.selection.isEstimated ? `<p>LÃƒÂ­nea estimada basada en mercado principal: ${escapeHtml(recommendation.selection.derivedFromLabel || "SÃƒÂ­")}</p>` : ""}
+            <p>Fuerza: ${escapeHtml(recommendation.strength.level)} Ã‚Â· Stake: ${escapeHtml(recommendation.strength.stake)}</p>
             <p style="margin-top:10px;">${escapeHtml(recommendation.reason || "")}</p>
           `
           : `
             <hr style="margin:12px 0; opacity:.15;">
             <p><strong>Pick recomendado:</strong> No bet</p>
-            <p>${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadÃ­stica.")}</p>
+            <p>${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadÃƒÂ­stica.")}</p>
           `
       }
 
@@ -1371,7 +1371,7 @@ function selectTotalRecommendation(bookmakers, projectedTotal) {
           bookmakerTitle: bookmaker.title,
           side: "Over",
           line: overPoint,
-          label: `MÃ¡s de ${overPoint}`,
+          label: `MÃƒÂ¡s de ${overPoint}`,
           odds: overPrice,
           impliedProbability: impliedProbabilityFromDecimal(overPrice),
           isEstimated: false
@@ -1426,7 +1426,7 @@ function buildOddsRecommendation({
       return {
         selection,
         strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
-        reason: `${awayName} es el lado que mejor respalda la lectura estadÃ­stica del matchup.`
+        reason: `${awayName} es el lado que mejor respalda la lectura estadÃƒÂ­stica del matchup.`
       };
     }
   }
@@ -1437,7 +1437,7 @@ function buildOddsRecommendation({
       return {
         selection,
         strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
-        reason: `${homeName} es el lado que mejor respalda la lectura estadÃ­stica del matchup.`
+        reason: `${homeName} es el lado que mejor respalda la lectura estadÃƒÂ­stica del matchup.`
       };
     }
   }
@@ -1447,7 +1447,7 @@ function buildOddsRecommendation({
     return {
       selection: totalSelection,
       strength: classifyBetStrength(2, totalSelection.odds, contextPenalty),
-      reason: "Como el lado estÃ¡ equilibrado, el mejor Ã¡ngulo del matchup aparece en el total."
+      reason: "Como el lado estÃƒÂ¡ equilibrado, el mejor ÃƒÂ¡ngulo del matchup aparece en el total."
     };
   }
 
@@ -1460,11 +1460,11 @@ function buildOddsRecommendation({
     return {
       selection: fallbackMoneyline,
       strength: classifyBetStrength(1.5, fallbackMoneyline.odds, contextPenalty),
-      reason: "No hubo spread/total claro, pero sÃ­ una opciÃ³n utilizable para seguir el lean principal."
+      reason: "No hubo spread/total claro, pero sÃƒÂ­ una opciÃƒÂ³n utilizable para seguir el lean principal."
     };
   }
 
-  return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadÃ­sticas y la disponibilidad.");
+  return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadÃƒÂ­sticas y la disponibilidad.");
 }
 
 function getLocalScoreboardDate(offsetDays = 0) {
@@ -1562,9 +1562,9 @@ async function loadNBAGames() {
       if (isFinal) {
         badgeText = "Finalizado";
       } else if (isLive) {
-        badgeText = `En progreso Â· Q${period || "-"} Â· ${clock || ""}`.trim();
+        badgeText = `En progreso Ã‚Â· Q${period || "-"} Ã‚Â· ${clock || ""}`.trim();
       } else {
-        badgeText = `Programado Â· ${formatGameTime(event.date)}`;
+        badgeText = `Programado Ã‚Â· ${formatGameTime(event.date)}`;
       }
 
       const card = document.createElement("article");
@@ -1612,7 +1612,7 @@ async function analyzeGame(gameId) {
   if (!analysisPanel) return;
 
   openModal();
-  analysisPanel.innerHTML = "<p>Cargando anÃ¡lisis pregame...</p>";
+  analysisPanel.innerHTML = "<p>Cargando anÃƒÂ¡lisis pregame...</p>";
 
   try {
     const summaryResult = await fetchGameSummary(gameId);
@@ -1727,7 +1727,7 @@ async function analyzeGame(gameId) {
       rivalQuality: getOpponentStrengthLabel(awayRecent5.opponentPctAvg),
       venueSplit: `Fuera: ${awayVenueSplit.record}, margen ${formatSignedOneDecimal(awayVenueSplit.diffAvg)}`,
       teamStyle: awayProfileRanked.label,
-      b2b: `${awayB2B.label} Â· ${awayB2B.detail}`,
+      b2b: `${awayB2B.label} Ã‚Â· ${awayB2B.detail}`,
       availability: renderAvailabilityInfo(awayAvailabilitySummary)
     };
 
@@ -1743,7 +1743,7 @@ async function analyzeGame(gameId) {
       rivalQuality: getOpponentStrengthLabel(homeRecent5.opponentPctAvg),
       venueSplit: `Casa: ${homeVenueSplit.record}, margen ${formatSignedOneDecimal(homeVenueSplit.diffAvg)}`,
       teamStyle: homeProfileRanked.label,
-      b2b: `${homeB2B.label} Â· ${homeB2B.detail}`,
+      b2b: `${homeB2B.label} Ã‚Â· ${homeB2B.detail}`,
       availability: renderAvailabilityInfo(homeAvailabilitySummary)
     };
 
@@ -1821,18 +1821,18 @@ async function analyzeGame(gameId) {
     const awayStrongScheduleRecent = awayRecent5.opponentPctAvg !== null && awayRecent5.opponentPctAvg >= 0.60;
     const homeStrongScheduleRecent = homeRecent5.opponentPctAvg !== null && homeRecent5.opponentPctAvg >= 0.60;
 
-    let autoNote = "La comparaciÃ³n es competitiva y no deja una ventaja contundente.";
+    let autoNote = "La comparaciÃƒÂ³n es competitiva y no deja una ventaja contundente.";
     if (awayEdge > homeEdge) {
       autoNote = `${awayName} llega mejor por perfil global, forma ajustada y rendimiento reciente como visitante.`;
-      if (awayWeakScheduleRecent) autoNote = `${awayName} llega mejor, pero parte de su forma reciente fue ante rivales mÃ¡s dÃ©biles.`;
+      if (awayWeakScheduleRecent) autoNote = `${awayName} llega mejor, pero parte de su forma reciente fue ante rivales mÃƒÂ¡s dÃƒÂ©biles.`;
       if (homeStrongScheduleRecent && awayEdge - homeEdge <= 2) {
-        autoNote = `${awayName} tiene nÃºmeros favorables, aunque ${homeName} enfrentÃ³ rivales mÃ¡s fuertes Ãºltimamente.`;
+        autoNote = `${awayName} tiene nÃƒÂºmeros favorables, aunque ${homeName} enfrentÃƒÂ³ rivales mÃƒÂ¡s fuertes ÃƒÂºltimamente.`;
       }
     } else if (homeEdge > awayEdge) {
       autoNote = `${homeName} llega mejor por perfil global, forma ajustada y rendimiento reciente como local.`;
-      if (homeWeakScheduleRecent) autoNote = `${homeName} llega mejor, pero parte de su forma reciente fue ante rivales mÃ¡s dÃ©biles.`;
+      if (homeWeakScheduleRecent) autoNote = `${homeName} llega mejor, pero parte de su forma reciente fue ante rivales mÃƒÂ¡s dÃƒÂ©biles.`;
       if (awayStrongScheduleRecent && homeEdge - awayEdge <= 2) {
-        autoNote = `${homeName} tiene mejores seÃ±ales globales, pero ${awayName} viene de enfrentar rivales mÃ¡s fuertes Ãºltimamente.`;
+        autoNote = `${homeName} tiene mejores seÃƒÂ±ales globales, pero ${awayName} viene de enfrentar rivales mÃƒÂ¡s fuertes ÃƒÂºltimamente.`;
       }
     }
 
@@ -1840,7 +1840,7 @@ async function analyzeGame(gameId) {
       autoNote += " La disponibilidad de jugadores ajusta la confianza del pick.";
     }
 
-    const availabilityNote = `${awayName}: ${awayStats.availability} Â· ${homeName}: ${homeStats.availability}`;
+    const availabilityNote = `${awayName}: ${awayStats.availability} Ã‚Â· ${homeName}: ${homeStats.availability}`;
 
     const recordCompare = compareNumbersHigherBetter(awayRecordParsed?.pct ?? null, homeRecordParsed?.pct ?? null);
     const recentScoredCompare = compareNumbersHigherBetter(awayRecentScoredNum, homeRecentScoredNum);
@@ -1891,7 +1891,7 @@ async function analyzeGame(gameId) {
       <div class="analysis-box">
         <div class="analysis-header">
           <h3>${escapeHtml(awayName)} vs ${escapeHtml(homeName)}</h3>
-          <p class="analysis-subtitle">AnÃ¡lisis pregame NBA</p>
+          <p class="analysis-subtitle">AnÃƒÂ¡lisis pregame NBA</p>
           <p class="analysis-date">${escapeHtml(gameDate)}</p>
         </div>
 
@@ -1911,20 +1911,20 @@ async function analyzeGame(gameId) {
           <div class="pregame-compare">
             <div class="pregame-row pregame-head">
               <div>${escapeHtml(awayName)}</div>
-              <div>MÃ©trica</div>
+              <div>MÃƒÂ©trica</div>
               <div>${escapeHtml(homeName)}</div>
             </div>
 
             ${buildStatRow(escapeHtml(awayStats.conference), "Conferencia", escapeHtml(homeStats.conference))}
             ${buildStatRow(
-              escapeHtml(`${awayStats.record} Â· ${awayStats.position}Âº`),
-              "RÃ©cord / PosiciÃ³n",
-              escapeHtml(`${homeStats.record} Â· ${homeStats.position}Âº`),
+              escapeHtml(`${awayStats.record} Ã‚Â· ${awayStats.position}Ã‚Âº`),
+              "RÃƒÂ©cord / PosiciÃƒÂ³n",
+              escapeHtml(`${homeStats.record} Ã‚Â· ${homeStats.position}Ã‚Âº`),
               recordCompare.away,
               recordCompare.home
             )}
             ${buildStatRow(escapeHtml(awayStats.context), "Contexto", escapeHtml(homeStats.context))}
-            ${buildStatRow(awayStats.recentFormHtml, "Ãšltimos 5", homeStats.recentFormHtml)}
+            ${buildStatRow(awayStats.recentFormHtml, "ÃƒÅ¡ltimos 5", homeStats.recentFormHtml)}
             ${buildStatRow(escapeHtml(awayStats.rivalQuality), "Calidad rival", escapeHtml(homeStats.rivalQuality))}
             ${buildStatRow(
               escapeHtml(awayStats.venueSplit),
@@ -1962,7 +1962,7 @@ async function analyzeGame(gameId) {
     `;
   } catch (error) {
     console.error("Pregame error:", error);
-    analysisPanel.innerHTML = "<p>No se pudo cargar el anÃ¡lisis pregame.</p>";
+    analysisPanel.innerHTML = "<p>No se pudo cargar el anÃƒÂ¡lisis pregame.</p>";
   }
 }
 
