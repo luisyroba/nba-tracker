@@ -383,7 +383,7 @@ function buildStandingsLookup(standingsData) {
         .join(" ");
 
       const noteText =
-        typeof entry?.note === "string'
+        typeof entry?.note === "string"
           ? entry.note
           : JSON.stringify(entry?.note || "");
 
