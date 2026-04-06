@@ -124,21 +124,6 @@ function normalizeGamesFromSchedule(data) {
   return [];
 }
 
-function getGameCalendarKey(dateString) {
-  if (!dateString) return null;
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
-}
-
-function getPreviousCalendarKey(dateString) {
-  if (!dateString) return null;
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setUTCDate(date.getUTCDate() - 1);
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
-}
-
 function getTeamGameInfo(event, teamId) {
   const comp = event?.competitions?.[0];
   if (!comp) return null;
@@ -169,7 +154,6 @@ function getTeamGameInfo(event, teamId) {
   return {
     id: event?.id || comp?.id || null,
     date,
-    dateKey: getGameCalendarKey(date),
     completed,
     homeAway: team?.homeAway || "unknown",
     teamScore,
@@ -278,6 +262,7 @@ function getB2BStatus(data, teamId, gameDate) {
     detail: "Descanso normal"
   };
 }
+
 function renderFormChips(games) {
   if (!games?.length) {
     return `<div class="form-chips empty"><span class="form-empty">Sin datos</span></div>`;
@@ -354,12 +339,35 @@ async function loadNBAGames() {
 
       const homeName = home?.team?.displayName || "Local";
       const awayName = away?.team?.displayName || "Visitante";
-      const homeScore = home?.score ?? "-";
-      const awayScore = away?.score ?? "-";
+
+      const homeScoreRaw = home?.score ?? "-";
+      const awayScoreRaw = away?.score ?? "-";
+
+      const homeScore =
+        typeof homeScoreRaw === "object"
+          ? homeScoreRaw?.displayValue ?? "-"
+          : homeScoreRaw;
+
+      const awayScore =
+        typeof awayScoreRaw === "object"
+          ? awayScoreRaw?.displayValue ?? "-"
+          : awayScoreRaw;
+
       const gameStatus = event.status?.type?.description || "Sin estado";
-      const date = event.date ? new Date(event.date).toLocaleString("es-CL") : "Sin fecha";
+      const date = event.date
+        ? new Date(event.date).toLocaleString("es-CL")
+        : "Sin fecha";
+
       const period = event.status?.period || null;
       const clock = event.status?.displayClock || "";
+      const statusState = event.status?.type?.state || "";
+      const isFinal = statusState === "post" || gameStatus.toLowerCase().includes("final");
+
+      const liveBadge = isFinal
+        ? "Finalizado"
+        : period
+          ? `LIVE · Q${period} · ${clock}`
+          : "";
 
       const card = document.createElement("article");
       card.className = "game-card";
@@ -373,20 +381,18 @@ async function loadNBAGames() {
         <div class="teams">
           <div class="team-row">
             <span class="team-name">${escapeHtml(awayName)}</span>
-            <strong class="team-score">${escapeHtml(
-              typeof awayScore === "object" ? awayScore?.displayValue ?? "-" : awayScore
-            )}</strong>
+            <strong class="team-score">${escapeHtml(awayScore)}</strong>
           </div>
 
           <div class="team-row">
             <span class="team-name">${escapeHtml(homeName)}</span>
-            <strong class="team-score">${escapeHtml(
-              typeof homeScore === "object" ? homeScore?.displayValue ?? "-" : homeScore
-            )}</strong>
+            <strong class="team-score">${escapeHtml(homeScore)}</strong>
           </div>
         </div>
 
-        <div class="live-extra">${period ? escapeHtml(`LIVE · Q${period} · ${clock}`) : ""}</div>
+        <div class="live-extra ${isFinal ? "is-final" : ""}">
+          ${escapeHtml(liveBadge)}
+        </div>
 
         <div class="game-actions">
           <button class="analyze-btn" data-game-id="${escapeHtml(event.id)}">
@@ -435,7 +441,9 @@ async function analyzeGame(gameId) {
     const homeTeamId = getTeamIdFromCompetitor(home);
     const awayTeamId = getTeamIdFromCompetitor(away);
 
-    const gameDate = comp?.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
+    const gameDate = comp?.date
+      ? new Date(comp.date).toLocaleString("es-CL")
+      : "Pendiente";
 
     const conferenceGroups = standingsData?.children || [];
 
@@ -572,62 +580,64 @@ async function analyzeGame(gameId) {
           <p>${escapeHtml(autoNote)}</p>
         </div>
 
-        <div class="pregame-compare">
-          <div class="pregame-row pregame-head">
-            <div>${escapeHtml(awayName)}</div>
-            <div>Métrica</div>
-            <div>${escapeHtml(homeName)}</div>
+        <div class="pregame-shell">
+          <div class="pregame-compare">
+            <div class="pregame-row pregame-head">
+              <div>${escapeHtml(awayName)}</div>
+              <div>Métrica</div>
+              <div>${escapeHtml(homeName)}</div>
+            </div>
+
+            ${buildStatRow(
+              escapeHtml(awayStats.conference),
+              "Conferencia",
+              escapeHtml(homeStats.conference)
+            )}
+
+            ${buildStatRow(
+              escapeHtml(`${awayStats.record} · ${awayStats.position}º`),
+              "Récord / Posición",
+              escapeHtml(`${homeStats.record} · ${homeStats.position}º`),
+              recordCompare.away,
+              recordCompare.home
+            )}
+
+            ${buildStatRow(
+              awayStats.recentFormHtml,
+              "Últimos 5",
+              homeStats.recentFormHtml
+            )}
+
+            ${buildStatRow(
+              escapeHtml(awayStats.pointsScoredRecent),
+              "Puntos anotados recientes",
+              escapeHtml(homeStats.pointsScoredRecent),
+              recentScoredCompare.away,
+              recentScoredCompare.home
+            )}
+
+            ${buildStatRow(
+              escapeHtml(awayStats.pointsAllowedRecent),
+              "Puntos recibidos recientes",
+              escapeHtml(homeStats.pointsAllowedRecent),
+              recentAllowedCompare.away,
+              recentAllowedCompare.home
+            )}
+
+            ${buildStatRow(
+              escapeHtml(awayStats.diffRecent),
+              "Diferencial reciente",
+              escapeHtml(homeStats.diffRecent),
+              recentDiffCompare.away,
+              recentDiffCompare.home
+            )}
+
+            ${buildStatRow(
+              escapeHtml(awayStats.b2b),
+              "Back to Back",
+              escapeHtml(homeStats.b2b)
+            )}
           </div>
-
-          ${buildStatRow(
-            escapeHtml(awayStats.conference),
-            "Conferencia",
-            escapeHtml(homeStats.conference)
-          )}
-
-          ${buildStatRow(
-            escapeHtml(`${awayStats.record} · ${awayStats.position}º`),
-            "Récord / Posición",
-            escapeHtml(`${homeStats.record} · ${homeStats.position}º`),
-            recordCompare.away,
-            recordCompare.home
-          )}
-
-          ${buildStatRow(
-            awayStats.recentFormHtml,
-            "Últimos 5",
-            homeStats.recentFormHtml
-          )}
-
-          ${buildStatRow(
-            escapeHtml(awayStats.pointsScoredRecent),
-            "Puntos anotados recientes",
-            escapeHtml(homeStats.pointsScoredRecent),
-            recentScoredCompare.away,
-            recentScoredCompare.home
-          )}
-
-          ${buildStatRow(
-            escapeHtml(awayStats.pointsAllowedRecent),
-            "Puntos recibidos recientes",
-            escapeHtml(homeStats.pointsAllowedRecent),
-            recentAllowedCompare.away,
-            recentAllowedCompare.home
-          )}
-
-          ${buildStatRow(
-            escapeHtml(awayStats.diffRecent),
-            "Diferencial reciente",
-            escapeHtml(homeStats.diffRecent),
-            recentDiffCompare.away,
-            recentDiffCompare.home
-          )}
-
-          ${buildStatRow(
-            escapeHtml(awayStats.b2b),
-            "Back to Back",
-            escapeHtml(homeStats.b2b)
-          )}
         </div>
       </div>
     `;
