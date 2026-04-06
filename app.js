@@ -797,12 +797,29 @@ function buildOddsApiEventMatchScore(oddsEvent, homeName, awayName, commenceTime
   const targetAway = normalizeString(awayName);
 
   let score = 0;
-  if (oddsHome === targetHome) score += 5;
-  if (oddsAway === targetAway) score += 5;
 
+  if (!oddsHome || !oddsAway || !targetHome || !targetAway) return 0;
+
+  // Coincidencia fuerte por nombre exacto
+  if (oddsHome === targetHome) score += 5;
+  else if (oddsHome.includes(targetHome) || targetHome.includes(oddsHome)) score += 3;
+
+  if (oddsAway === targetAway) score += 5;
+  else if (oddsAway.includes(targetAway) || targetAway.includes(oddsAway)) score += 3;
+
+  // Por si hubiera inversión de local/visitante en alguna fuente
+  if (oddsHome === targetAway || oddsAway === targetHome) score += 2;
+
+  // Coincidencia temporal: ventana más amplia
   if (commenceTime && oddsEvent?.commence_time) {
-    const diff = Math.abs(new Date(oddsEvent.commence_time).getTime() - new Date(commenceTime).getTime());
-    if (diff <= 1000 * 60 * 180) score += 2;
+    const diff = Math.abs(
+      new Date(oddsEvent.commence_time).getTime() - new Date(commenceTime).getTime()
+    );
+
+    // ≤ 4h de diferencia: bonus fuerte
+    if (diff <= 1000 * 60 * 240) score += 2;
+    // ≤ 8h de diferencia: bonus suave
+    else if (diff <= 1000 * 60 * 480) score += 1;
   }
 
   return score;
@@ -816,10 +833,28 @@ function findMatchingOddsEvent(oddsEvents, homeName, awayName, commenceTime = nu
       event,
       score: buildOddsApiEventMatchScore(event, homeName, awayName, commenceTime)
     }))
-    .filter(item => item.score >= 10)
+    .filter(item => item.score >= 6) // antes 10
     .sort((a, b) => b.score - a.score);
 
-  return scored[0]?.event || null;
+  if (scored.length) {
+    return scored[0].event;
+  }
+
+  // Fallback: al menos un equipo coincide de forma razonable
+  const targetHome = normalizeString(homeName);
+  const targetAway = normalizeString(awayName);
+
+  const fallback = oddsEvents.find(event => {
+    const eh = normalizeString(event?.home_team);
+    const ea = normalizeString(event?.away_team);
+
+    return (
+      (eh && (eh.includes(targetHome) || targetHome.includes(eh))) ||
+      (ea && (ea.includes(targetAway) || targetAway.includes(ea)))
+    );
+  });
+
+  return fallback || null;
 }
 
 function normalizeBookmakers(bookmakers) {
