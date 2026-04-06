@@ -235,7 +235,6 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standings
 
   const scored = recentGames.map(game => game.teamScore);
   const allowed = recentGames.map(game => game.opponentScore);
-  const diffList = recentGames.map(game => game.rawDiff);
 
   const weightedDiffAvg = average(recentGames.map(game => game.weightedDiff));
   const opponentPctAvg = average(recentGames.map(game => game.opponentPct).filter(v => v !== null));
@@ -245,9 +244,32 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standings
     record: recentGames.length ? `${wins}-${losses}` : "Pendiente",
     scoredAvg: average(scored),
     allowedAvg: average(allowed),
-    diffAvg: average(diffList),
     adjustedDiffAvg: weightedDiffAvg,
     opponentPctAvg
+  };
+}
+
+function getVenueSplitForm(scheduleData, teamId, gameDate, venueType, sampleSize = 5) {
+  const events = normalizeGamesFromSchedule(scheduleData);
+  const targetTime = gameDate ? new Date(gameDate).getTime() : Date.now();
+
+  const filtered = events
+    .map(event => getTeamGameInfo(event, teamId))
+    .filter(Boolean)
+    .filter(game => game.completed)
+    .filter(game => game.date && new Date(game.date).getTime() < targetTime)
+    .filter(game => game.teamScore !== null && game.opponentScore !== null)
+    .filter(game => game.homeAway === venueType)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, sampleSize);
+
+  const wins = filtered.filter(game => game.won === true).length;
+  const losses = filtered.filter(game => game.won === false).length;
+
+  return {
+    games: filtered,
+    record: filtered.length ? `${wins}-${losses}` : "Pendiente",
+    diffAvg: average(filtered.map(game => game.teamScore - game.opponentScore))
   };
 }
 
@@ -284,11 +306,9 @@ function getB2BStatus(data, teamId, gameDate) {
     if (previousGame.homeAway === "home") {
       return { isB2B: true, label: "Sí", detail: "B2B en casa" };
     }
-
     if (previousGame.homeAway === "away") {
       return { isB2B: true, label: "Sí", detail: "B2B con viaje" };
     }
-
     return { isB2B: true, label: "Sí", detail: "B2B" };
   }
 
@@ -361,7 +381,7 @@ async function fetchConferenceStandingsSorted() {
     }
   }
 
-  throw new Error("No se pudo cargar standings ordenados por playoff seed");
+  throw new Error("No se pudo cargar standings ordenados");
 }
 
 function buildStandingsLookup(standingsData) {
@@ -432,6 +452,71 @@ function formatGameTime(dateString) {
   const hh = String(date.getHours()).padStart(2, "0");
   const mm = String(date.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
+}
+
+async function fetchTeamSeasonStats(teamId) {
+  if (!teamId) return null;
+
+  const urls = [
+    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/statistics`,
+    `https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/statistics`
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data) return data;
+    } catch (error) {
+      console.warn("Team stats fetch failed:", url, error);
+    }
+  }
+
+  return null;
+}
+
+function extractTeamProfile(statsData) {
+  const categories = statsData?.results?.stats?.categories || statsData?.statistics?.splits?.categories || [];
+  const allStats = categories.flatMap(cat => cat?.stats || []);
+
+  function pick(names) {
+    for (const name of names) {
+      const found = allStats.find(stat => String(stat?.name || "").toLowerCase() === name.toLowerCase());
+      if (found) {
+        return found.displayValue ?? found.value ?? null;
+      }
+    }
+    return null;
+  }
+
+  const ppg = toNumber(pick(["pointsPerGame", "avgPoints", "points"]));
+  const oppPpg = toNumber(pick(["pointsAllowedPerGame", "avgPointsAllowed", "oppPointsPerGame"]));
+
+  return {
+    ppg,
+    oppPpg
+  };
+}
+
+function getTeamStyleLabel(profile) {
+  const ppg = profile?.ppg;
+  const oppPpg = profile?.oppPpg;
+
+  let offense = "Ataque medio";
+  let defense = "Defensa media";
+
+  if (ppg !== null) {
+    if (ppg >= 118) offense = "Ataque fuerte";
+    else if (ppg <= 110) offense = "Ataque flojo";
+  }
+
+  if (oppPpg !== null) {
+    if (oppPpg <= 110) defense = "Defensa fuerte";
+    else if (oppPpg >= 118) defense = "Defensa floja";
+  }
+
+  return `${offense} / ${defense}`;
 }
 
 async function loadNBAGames() {
@@ -587,13 +672,18 @@ async function analyzeGame(gameId) {
       standingsLookup.byName[homeName] ||
       null;
 
-    const [awaySchedule, homeSchedule] = await Promise.all([
+    const [awaySchedule, homeSchedule, awaySeasonStats, homeSeasonStats] = await Promise.all([
       fetchTeamSchedule(awayTeamId),
-      fetchTeamSchedule(homeTeamId)
+      fetchTeamSchedule(homeTeamId),
+      fetchTeamSeasonStats(awayTeamId),
+      fetchTeamSeasonStats(homeTeamId)
     ]);
 
     const awayRecent5 = getRecentFormFromSchedule(awaySchedule, awayTeamId, comp?.date, 5, standingsLookup);
     const homeRecent5 = getRecentFormFromSchedule(homeSchedule, homeTeamId, comp?.date, 5, standingsLookup);
+
+    const awayVenueSplit = getVenueSplitForm(awaySchedule, awayTeamId, comp?.date, "away", 5);
+    const homeVenueSplit = getVenueSplitForm(homeSchedule, homeTeamId, comp?.date, "home", 5);
 
     const awayB2B = getB2BStatus(awaySchedule, awayTeamId, comp?.date);
     const homeB2B = getB2BStatus(homeSchedule, homeTeamId, comp?.date);
@@ -608,6 +698,9 @@ async function analyzeGame(gameId) {
       homeEntry?.clincher || null
     );
 
+    const awayProfile = extractTeamProfile(awaySeasonStats);
+    const homeProfile = extractTeamProfile(homeSeasonStats);
+
     const awayStats = {
       conference: awayEntry?.conference || "Pendiente",
       position: awayEntry?.conferencePosition || "-",
@@ -618,6 +711,8 @@ async function analyzeGame(gameId) {
       pointsAllowedRecent: formatOneDecimal(awayRecent5.allowedAvg),
       adjustedDiffRecent: formatSignedOneDecimal(awayRecent5.adjustedDiffAvg),
       rivalQuality: getOpponentStrengthLabel(awayRecent5.opponentPctAvg),
+      venueSplit: `${awayVenueSplit.record} · ${formatSignedOneDecimal(awayVenueSplit.diffAvg)}`,
+      teamStyle: getTeamStyleLabel(awayProfile),
       b2b: `${awayB2B.label} · ${awayB2B.detail}`
     };
 
@@ -631,6 +726,8 @@ async function analyzeGame(gameId) {
       pointsAllowedRecent: formatOneDecimal(homeRecent5.allowedAvg),
       adjustedDiffRecent: formatSignedOneDecimal(homeRecent5.adjustedDiffAvg),
       rivalQuality: getOpponentStrengthLabel(homeRecent5.opponentPctAvg),
+      venueSplit: `${homeVenueSplit.record} · ${formatSignedOneDecimal(homeVenueSplit.diffAvg)}`,
+      teamStyle: getTeamStyleLabel(homeProfile),
       b2b: `${homeB2B.label} · ${homeB2B.detail}`
     };
 
@@ -645,6 +742,9 @@ async function analyzeGame(gameId) {
 
     const awayAdjustedDiffNum = toNumber(awayStats.adjustedDiffRecent);
     const homeAdjustedDiffNum = toNumber(homeStats.adjustedDiffRecent);
+
+    const awayVenueDiffNum = awayVenueSplit.diffAvg;
+    const homeVenueDiffNum = homeVenueSplit.diffAvg;
 
     let awayEdge = 0;
     let homeEdge = 0;
@@ -678,12 +778,24 @@ async function analyzeGame(gameId) {
       if (homeRecentScoredNum > awayRecentScoredNum) homeEdge += 1;
     }
 
+    if (awayVenueDiffNum !== null && homeVenueDiffNum !== null) {
+      if (awayVenueDiffNum > homeVenueDiffNum) awayEdge += 1;
+      if (homeVenueDiffNum > awayVenueDiffNum) homeEdge += 1;
+    }
+
     if (awayB2B.isB2B && !homeB2B.isB2B) homeEdge += 1;
     if (homeB2B.isB2B && !awayB2B.isB2B) awayEdge += 1;
 
     let edgeText = "Matchup equilibrado";
-    if (awayEdge > homeEdge) edgeText = `Ventaja ${awayName}`;
-    if (homeEdge > awayEdge) edgeText = `Ventaja ${homeName}`;
+    let leanText = "No bet";
+
+    if (awayEdge >= homeEdge + 2) {
+      edgeText = `Ventaja ${awayName}`;
+      leanText = `Lean visitante: ${awayName}`;
+    } else if (homeEdge >= awayEdge + 2) {
+      edgeText = `Ventaja ${homeName}`;
+      leanText = `Lean local: ${homeName}`;
+    }
 
     const awayWeakScheduleRecent = awayRecent5.opponentPctAvg !== null && awayRecent5.opponentPctAvg < 0.45;
     const homeWeakScheduleRecent = homeRecent5.opponentPctAvg !== null && homeRecent5.opponentPctAvg < 0.45;
@@ -691,19 +803,16 @@ async function analyzeGame(gameId) {
     const homeStrongScheduleRecent = homeRecent5.opponentPctAvg !== null && homeRecent5.opponentPctAvg >= 0.60;
 
     let autoNote = "La comparación es competitiva y no deja una ventaja contundente.";
-
     if (awayEdge > homeEdge) {
-      autoNote = `${awayName} llega mejor por perfil global, forma ajustada y contexto competitivo.`;
+      autoNote = `${awayName} llega mejor por perfil global, forma ajustada y rendimiento reciente como visitante.`;
       if (awayWeakScheduleRecent) {
         autoNote = `${awayName} llega mejor, pero parte de su forma reciente fue ante rivales más débiles.`;
       }
       if (homeStrongScheduleRecent && awayEdge - homeEdge <= 2) {
         autoNote = `${awayName} tiene números favorables, aunque ${homeName} enfrentó rivales más fuertes últimamente.`;
       }
-    }
-
-    if (homeEdge > awayEdge) {
-      autoNote = `${homeName} llega mejor por perfil global, forma ajustada y contexto competitivo.`;
+    } else if (homeEdge > awayEdge) {
+      autoNote = `${homeName} llega mejor por perfil global, forma ajustada y rendimiento reciente como local.`;
       if (homeWeakScheduleRecent) {
         autoNote = `${homeName} llega mejor, pero parte de su forma reciente fue ante rivales más débiles.`;
       }
@@ -732,6 +841,11 @@ async function analyzeGame(gameId) {
       homeAdjustedDiffNum
     );
 
+    const venueCompare = compareNumbersHigherBetter(
+      awayVenueDiffNum,
+      homeVenueDiffNum
+    );
+
     analysisPanel.innerHTML = `
       <div class="analysis-box">
         <div class="analysis-header">
@@ -743,6 +857,7 @@ async function analyzeGame(gameId) {
         <div class="betting-notes">
           <h4>${escapeHtml(edgeText)}</h4>
           <p>${escapeHtml(autoNote)}</p>
+          <p style="margin-top:10px;"><strong>${escapeHtml(leanText)}</strong></p>
         </div>
 
         <div class="pregame-shell">
@@ -783,6 +898,20 @@ async function analyzeGame(gameId) {
               escapeHtml(awayStats.rivalQuality),
               "Calidad rival reciente",
               escapeHtml(homeStats.rivalQuality)
+            )}
+
+            ${buildStatRow(
+              escapeHtml(awayStats.venueSplit),
+              "Split sede actual",
+              escapeHtml(homeStats.venueSplit),
+              venueCompare.away,
+              venueCompare.home
+            )}
+
+            ${buildStatRow(
+              escapeHtml(awayStats.teamStyle),
+              "Perfil actual",
+              escapeHtml(homeStats.teamStyle)
             )}
 
             ${buildStatRow(
