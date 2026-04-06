@@ -480,6 +480,31 @@ function extractTeamProfile(statsData) {
   const categories = statsData?.results?.stats?.categories || statsData?.statistics?.splits?.categories || [];
   const allStats = categories.flatMap(cat => cat?.stats || []);
 
+function buildLeagueProfilesMap(teamProfiles) {
+  const offenseValues = teamProfiles
+    .map(team => team.profile?.ppg ?? null)
+    .filter(v => v !== null && !Number.isNaN(v));
+
+  const defenseValues = teamProfiles
+    .map(team => team.profile?.oppPpg ?? null)
+    .filter(v => v !== null && !Number.isNaN(v));
+
+  const result = {};
+
+  for (const team of teamProfiles) {
+    const offenseRank = getRankFromValue(team.profile?.ppg ?? null, offenseValues, true);
+    const defenseRank = getRankFromValue(team.profile?.oppPpg ?? null, defenseValues, false);
+
+    result[String(team.teamId)] = {
+      offenseRank,
+      defenseRank,
+      label: getTeamStyleLabel(team.profile, offenseRank, defenseRank)
+    };
+  }
+
+  return result;
+}
+
   function pick(names) {
     for (const name of names) {
       const found = allStats.find(stat => String(stat?.name || "").toLowerCase() === name.toLowerCase());
@@ -499,24 +524,29 @@ function extractTeamProfile(statsData) {
   };
 }
 
-function getTeamStyleLabel(profile) {
-  const ppg = profile?.ppg;
-  const oppPpg = profile?.oppPpg;
+function rankTierLabel(rank) {
+  const num = Number(rank);
+  if (Number.isNaN(num) || num <= 0) return "media";
+  if (num <= 10) return "fuerte";
+  if (num <= 20) return "media";
+  return "mala";
+}
 
-  let offense = "Ataque medio";
-  let defense = "Defensa media";
+function getRankFromValue(value, sortedValues, higherIsBetter = true) {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
 
-  if (ppg !== null) {
-    if (ppg >= 118) offense = "Ataque fuerte";
-    else if (ppg <= 110) offense = "Ataque flojo";
-  }
+  const unique = [...new Set(sortedValues.filter(v => v !== null && !Number.isNaN(v)))];
 
-  if (oppPpg !== null) {
-    if (oppPpg <= 110) defense = "Defensa fuerte";
-    else if (oppPpg >= 118) defense = "Defensa floja";
-  }
+  unique.sort((a, b) => higherIsBetter ? b - a : a - b);
 
-  return `${offense} / ${defense}`;
+  const index = unique.findIndex(v => v === value);
+  return index >= 0 ? index + 1 : null;
+}
+
+function getTeamStyleLabel(profile, offenseRank, defenseRank) {
+  const offenseLabel = rankTierLabel(offenseRank);
+  const defenseLabel = rankTierLabel(defenseRank);
+  return `Ataque ${offenseLabel} | Defensa ${defenseLabel}`;
 }
 
 async function loadNBAGames() {
@@ -672,12 +702,13 @@ async function analyzeGame(gameId) {
       standingsLookup.byName[homeName] ||
       null;
 
-    const [awaySchedule, homeSchedule, awaySeasonStats, homeSeasonStats] = await Promise.all([
-      fetchTeamSchedule(awayTeamId),
-      fetchTeamSchedule(homeTeamId),
-      fetchTeamSeasonStats(awayTeamId),
-      fetchTeamSeasonStats(homeTeamId)
-    ]);
+const [awaySchedule, homeSchedule, awaySeasonStats, homeSeasonStats, allStandingsData] = await Promise.all([
+  fetchTeamSchedule(awayTeamId),
+  fetchTeamSchedule(homeTeamId),
+  fetchTeamSeasonStats(awayTeamId),
+  fetchTeamSeasonStats(homeTeamId),
+  fetchConferenceStandingsSorted()
+]);
 
     const awayRecent5 = getRecentFormFromSchedule(awaySchedule, awayTeamId, comp?.date, 5, standingsLookup);
     const homeRecent5 = getRecentFormFromSchedule(homeSchedule, homeTeamId, comp?.date, 5, standingsLookup);
@@ -700,6 +731,34 @@ async function analyzeGame(gameId) {
 
     const awayProfile = extractTeamProfile(awaySeasonStats);
     const homeProfile = extractTeamProfile(homeSeasonStats);
+    const leagueTeamIds = allStandingsData?.children
+  ?.flatMap(group => group?.standings?.entries || [])
+  ?.map(entry => String(entry?.team?.id || ""))
+  ?.filter(Boolean) || [];
+
+const leagueProfilesRaw = await Promise.all(
+  leagueTeamIds.map(async (teamId) => {
+    const stats = await fetchTeamSeasonStats(teamId);
+    return {
+      teamId,
+      profile: extractTeamProfile(stats)
+    };
+  })
+);
+
+const leagueProfilesMap = buildLeagueProfilesMap(leagueProfilesRaw);
+
+const awayProfileRanked = leagueProfilesMap[String(awayTeamId)] || {
+  offenseRank: null,
+  defenseRank: null,
+  label: "Ataque medio | Defensa media"
+};
+
+const homeProfileRanked = leagueProfilesMap[String(homeTeamId)] || {
+  offenseRank: null,
+  defenseRank: null,
+  label: "Ataque medio | Defensa media"
+};
 
     const awayStats = {
       conference: awayEntry?.conference || "Pendiente",
@@ -711,8 +770,8 @@ async function analyzeGame(gameId) {
       pointsAllowedRecent: formatOneDecimal(awayRecent5.allowedAvg),
       adjustedDiffRecent: formatSignedOneDecimal(awayRecent5.adjustedDiffAvg),
       rivalQuality: getOpponentStrengthLabel(awayRecent5.opponentPctAvg),
-      venueSplit: `${awayVenueSplit.record} · ${formatSignedOneDecimal(awayVenueSplit.diffAvg)}`,
-      teamStyle: getTeamStyleLabel(awayProfile),
+      venueSplit: `Fuera: ${awayVenueSplit.record}, margen ${formatSignedOneDecimal(awayVenueSplit.diffAvg)}`,
+      teamStyle: awayProfileRanked.label,
       b2b: `${awayB2B.label} · ${awayB2B.detail}`
     };
 
@@ -726,8 +785,8 @@ async function analyzeGame(gameId) {
       pointsAllowedRecent: formatOneDecimal(homeRecent5.allowedAvg),
       adjustedDiffRecent: formatSignedOneDecimal(homeRecent5.adjustedDiffAvg),
       rivalQuality: getOpponentStrengthLabel(homeRecent5.opponentPctAvg),
-      venueSplit: `${homeVenueSplit.record} · ${formatSignedOneDecimal(homeVenueSplit.diffAvg)}`,
-      teamStyle: getTeamStyleLabel(homeProfile),
+      venueSplit: `Casa: ${homeVenueSplit.record}, margen ${formatSignedOneDecimal(homeVenueSplit.diffAvg)}`,
+      teamStyle: homeProfileRanked.label,
       b2b: `${homeB2B.label} · ${homeB2B.detail}`
     };
 
@@ -876,7 +935,7 @@ async function analyzeGame(gameId) {
 
             ${buildStatRow(
               escapeHtml(`${awayStats.record} · ${awayStats.position}º`),
-              "Récord / Seed",
+              "Récord / Posición",
               escapeHtml(`${homeStats.record} · ${homeStats.position}º`),
               recordCompare.away,
               recordCompare.home
@@ -884,7 +943,7 @@ async function analyzeGame(gameId) {
 
             ${buildStatRow(
               escapeHtml(awayStats.context),
-              "Contexto competitivo",
+              "Contexto",
               escapeHtml(homeStats.context)
             )}
 
@@ -896,17 +955,17 @@ async function analyzeGame(gameId) {
 
             ${buildStatRow(
               escapeHtml(awayStats.rivalQuality),
-              "Calidad rival reciente",
+              "Calidad Rival",
               escapeHtml(homeStats.rivalQuality)
             )}
 
             ${buildStatRow(
-              escapeHtml(awayStats.venueSplit),
-              "Split sede actual",
-              escapeHtml(homeStats.venueSplit),
-              venueCompare.away,
-              venueCompare.home
-            )}
+  escapeHtml(awayStats.venueSplit),
+  "Forma fuera/casa",
+  escapeHtml(homeStats.venueSplit),
+  venueCompare.away,
+  venueCompare.home
+)}
 
             ${buildStatRow(
               escapeHtml(awayStats.teamStyle),
@@ -916,7 +975,7 @@ async function analyzeGame(gameId) {
 
             ${buildStatRow(
               escapeHtml(awayStats.pointsScoredRecent),
-              "Puntos anotados recientes",
+              "Puntos anotados",
               escapeHtml(homeStats.pointsScoredRecent),
               recentScoredCompare.away,
               recentScoredCompare.home
@@ -924,7 +983,7 @@ async function analyzeGame(gameId) {
 
             ${buildStatRow(
               escapeHtml(awayStats.pointsAllowedRecent),
-              "Puntos recibidos recientes",
+              "Puntos recibidos",
               escapeHtml(homeStats.pointsAllowedRecent),
               recentAllowedCompare.away,
               recentAllowedCompare.home
@@ -932,7 +991,7 @@ async function analyzeGame(gameId) {
 
             ${buildStatRow(
               escapeHtml(awayStats.adjustedDiffRecent),
-              "Diferencial ajustado",
+              "Diferencial",
               escapeHtml(homeStats.adjustedDiffRecent),
               adjustedDiffCompare.away,
               adjustedDiffCompare.home
@@ -940,7 +999,7 @@ async function analyzeGame(gameId) {
 
             ${buildStatRow(
               escapeHtml(awayStats.b2b),
-              "Back to Back",
+              "B2B,
               escapeHtml(homeStats.b2b)
             )}
           </div>
