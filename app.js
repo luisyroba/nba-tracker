@@ -3,7 +3,7 @@
    Cambios aplicados:
    1. Pick card arriba del todo en el modal
    2. Alerta naranja si favorito tiene jugador clave OUT
-   3. Líneas alternativas de spread conservadoras
+   3. Líneas alternativas de spread conservadoras (50% del spread oficial)
    4. Casas filtradas: solo bet365, betsson, stake
    5. Modal header con logos + hora
    6. Logos equipo en cards y roster (tamaño correcto)
@@ -207,10 +207,16 @@ function sortBookmakersByPriority(bms){ return [...bms].sort((a,b)=>{ const ai=B
 function getBookmakerDisplayName(key,title){ const n={bet365:'Bet365',betsson:'Betsson',stake:'Stake'}; return n[key?.toLowerCase()]||title||key||'—'; }
 function findOutcomeByTeamName(outcomes,teamName){ const t=normTeam(teamName); return outcomes.find(o=>normTeam(o.name)===t)||outcomes.find(o=>normTeam(o.name).includes(t.split(' ').pop()))||null; }
 
-/* ── Side recommendation con líneas alternativas ── */
+/* ── Side recommendation con líneas alternativas conservadoras ──
+   • Si spread oficial <= 6 pts y razonable → recomienda directo
+   • Si spread oficial > 4 pts → busca línea alternativa al 50% del spread,
+     bajando de 0.5 en 0.5 hasta -3.5. Solo si edge >= alt + 1.5 pts.
+   • Si no hay alternativa válida → fallback a moneyline
+*/
 function selectSideRecommendation(bookmakers,preferredSide,estimatedMargin=null){
   const ordered=sortBookmakersByPriority(bookmakers);
   const margin=Number(estimatedMargin), hasMargin=!Number.isNaN(margin)&&estimatedMargin!==null;
+  const marginAbs=hasMargin?Math.abs(margin):0;
   for(const bm of ordered){
     const h2h=bm?.markets?.find(m=>m?.key==='h2h');
     const spreads=bm?.markets?.find(m=>m?.key==='spreads');
@@ -220,16 +226,23 @@ function selectSideRecommendation(bookmakers,preferredSide,estimatedMargin=null)
     const playableML=mlOut&&mlPrice>=1.5;
     const playableSP=spOut&&spPrice>=1.5&&spPoint!==null;
     if(!playableML&&!playableSP) continue;
-    if(playableSP&&hasMargin){
-      const spAbs=Math.abs(spPoint), margAbs=Math.abs(margin);
-      const reasonable=spPoint>0||spAbs<=Math.max(1.5,margAbs-1.5);
-      if(reasonable&&margAbs>=4) return {type:'spread',bookmakerKey:bm.key,bookmakerTitle:bm.title,side:preferredSide,line:spPoint,label:`${preferredSide} ${spPoint>0?`+${spPoint}`:spPoint}`,odds:spPrice,impliedProbability:impliedProbabilityFromDecimal(spPrice)};
-      /* líneas alternativas: busca la primera con valor */
-      if(spPoint<-4&&margAbs>=4){
-        for(let alt=spPoint+3.5;alt<=-3.5;alt+=0.5){
-          if(margAbs>=Math.abs(alt)+2){
-            const diff=Math.abs(spPoint-alt), estP=Math.min(1.95,1.75+diff*0.015);
-            if(estP>=1.50) return {type:'spread',bookmakerKey:bm.key,bookmakerTitle:bm.title,side:preferredSide,line:alt,
+    if(playableSP&&hasMargin&&marginAbs>=3){
+      const spAbs=Math.abs(spPoint);
+      /* --- Spread oficial <= 6 pts y razonable: recomendar directo --- */
+      const reasonable=spPoint>0||spAbs<=Math.max(1.5,marginAbs-1.5);
+      if(reasonable&&spAbs<=6) return {type:'spread',bookmakerKey:bm.key,bookmakerTitle:bm.title,side:preferredSide,line:spPoint,label:`${preferredSide} ${spPoint>0?`+${spPoint}`:spPoint}`,odds:spPrice,impliedProbability:impliedProbabilityFromDecimal(spPrice)};
+      /* --- Spread agresivo (>4 pts): busca línea alternativa conservadora --- */
+      if(spAbs>4){
+        /* Empieza en 50% del spread oficial, baja de 0.5 en 0.5 hasta -3.5 */
+        const altStart=Math.max(-3.5,Math.ceil((spPoint*0.5)/0.5)*0.5);
+        for(let alt=altStart;alt>=spPoint&&alt<=-3.5;alt=parseFloat((alt-0.5).toFixed(1))){
+          const altAbs=Math.abs(alt);
+          /* Edge debe cubrir la línea alternativa con 1.5 pts de buffer */
+          if(marginAbs>=altAbs+1.5){
+            const diffFromOfficial=Math.abs(spPoint-alt);
+            /* Precio estimado: más conservadora la línea → cuota más baja */
+            const estP=Math.min(1.90,Math.max(1.55,spPrice-diffFromOfficial*0.04));
+            if(estP>=1.55) return {type:'spread',bookmakerKey:bm.key,bookmakerTitle:bm.title,side:preferredSide,line:alt,
               label:`${preferredSide} ${alt>0?`+${alt}`:alt}`,odds:Math.round(estP*100)/100,
               impliedProbability:impliedProbabilityFromDecimal(estP),isAltLine:true};
           }
@@ -308,7 +321,7 @@ function renderPickCard(rec, leanText, autoNote, awayName, homeName, injuryAlert
     : '';
 
   const badgeClass=nobet?'nobet':strength.level==='Fuerte'?'strong':strength.level==='Medio'?'medium':'weak';
-  const badgeIcon=nobet?'⊘':strength.level==='Fuerte'?'🔥':strength.level==='Medio'?'✅':'📊';
+  const badgeIcon=nobet?'⊖':strength.level==='Fuerte'?'🔥':strength.level==='Medio'?'✅':'📊';
 
   /* nota automática del original */
   const autoNoteHtml=autoNote?`<div class="pick-autonote">${escapeHtml(autoNote)}</div>`:'';
