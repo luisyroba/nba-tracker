@@ -43,7 +43,6 @@ main {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
-/* GRID PARTIDOS */
 #games {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -160,7 +159,6 @@ main {
   background: #16346d;
 }
 
-/* MODAL */
 .modal.hidden {
   display: none;
 }
@@ -229,7 +227,6 @@ main {
   padding: 18px;
 }
 
-/* ANALYSIS */
 .analysis-box {
   display: flex;
   flex-direction: column;
@@ -254,26 +251,73 @@ main {
   color: #444;
 }
 
-.betting-notes {
-  background: #fff8e8;
-  border: 1px solid #f0d999;
-  border-radius: 14px;
+.bet-recommendation-card {
+  border-radius: 16px;
   padding: 16px;
+  border: 1px solid #dbe3ef;
+  background: #f8fbff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
 }
 
-.betting-notes h4 {
-  margin: 0 0 10px;
-  font-size: 18px;
-  color: #8a5a00;
+.bet-recommendation-card.is-positive {
+  background: linear-gradient(180deg, #f3fbf6, #ffffff);
+  border-color: #b9e3c6;
 }
 
-.betting-notes p {
-  margin: 0;
+.bet-recommendation-card.is-neutral {
+  background: linear-gradient(180deg, #f8fafc, #ffffff);
+  border-color: #d9e2ec;
+}
+
+.bet-kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #1d428a;
+}
+
+.bet-recommendation-card h4 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  color: #111827;
+}
+
+.bet-note,
+.bet-lean,
+.bet-availability,
+.bet-pick p {
+  margin: 0 0 8px;
   font-size: 15px;
-  color: #333;
+  color: #334155;
 }
 
-/* TABLA PREGAME */
+.bet-pick {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.no-bet-copy {
+  color: #475569;
+}
+
+.team-availability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.availability-card-lite {
+  margin-top: 0 !important;
+  padding: 12px;
+  border: 1px solid #dbe3ef !important;
+  border-radius: 12px;
+  background: #ffffff !important;
+}
+
 .pregame-shell {
   margin-top: 18px;
 }
@@ -349,7 +393,6 @@ main {
   font-weight: 700;
 }
 
-/* FORM U5 */
 .form-chips {
   display: flex;
   align-items: center;
@@ -400,7 +443,6 @@ main {
   color: #333;
 }
 
-/* MOBILE */
 @media (max-width: 900px) {
   #games {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -545,6 +587,10 @@ main {
     justify-content: flex-start;
     flex-wrap: wrap;
   }
+
+  .team-availability-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
@@ -573,14 +619,6 @@ main {
 
   .analysis-header h3 {
     font-size: 20px;
-  }
-
-  .betting-notes {
-    padding: 14px;
-  }
-
-  .betting-notes h4 {
-    font-size: 17px;
   }
 
   .pregame-shell .pregame-row > div {
