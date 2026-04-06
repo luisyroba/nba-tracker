@@ -7,15 +7,10 @@ const modalCloseBtn = document.getElementById("modal-close");
 const modalCloseBg = document.getElementById("modal-close-bg");
 
 const ODDS_API_KEY = "987635aba320e6bdebcf265db26707ae";
-const ODDS_API_SPORT = "basketball_nba";
-const ODDS_API_REGIONS = "eu,uk,us";
-const ODDS_API_MARKETS = "h2h,spreads,totals";
-const BOOKMAKER_PRIORITY = ["betano", "novibet", "bet365", "1xbet"];
+const BOOKMAKER_PRIORITY = ["1xbet", "bet365", "betsson", "stake", "coolbet"];
 
-let leagueProfilesCache = null;
 let oddsCache = null;
 let oddsCacheTime = 0;
-let scoreboardCache = [];
 
 function openModal() {
   if (!modal) return;
@@ -787,42 +782,36 @@ function getBookmakerDisplayName(key, title) {
 
 async function fetchOddsApiEvents() {
   const now = Date.now();
-  const TTL = 1000 * 60 * 60; // caché 60 minutos
+  const TTL = 1000 * 60 * 60;
   if (oddsCache && now - oddsCacheTime < TTL) return oddsCache;
 
-  const url = `https://api.sportsgameodds.com/v2/events?leagueID=NBA&oddsAvailable=true&oddID=points-home-game-ml-home,points-away-game-ml-away,points-home-game-sp-home,points-away-game-sp-away,points-all-game-ou-over,points-all-game-ou-under&includeOpposingOdds=false&apiKey=${ODDS_API_KEY}`;
-
+  const url = `https://api.sportsgameodds.com/v2/events?leagueID=NBA&oddsAvailable=true&apiKey=${ODDS_API_KEY}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`SportsGameOdds HTTP ${res.status}`);
   const json = await res.json();
-
   if (!json?.success || !Array.isArray(json?.data)) return [];
 
-  // Normalizamos al formato que ya espera tu app (igual que The Odds API)
   oddsCache = json.data.map(ev => {
-    const homeTeam = ev.homeTeam?.names?.long || ev.homeTeam?.name || ev.homeTeamID || "";
-    const awayTeam = ev.awayTeam?.names?.long || ev.awayTeam?.name || ev.awayTeamID || "";
+    const homeTeam = ev.teams?.home?.names?.long || "";
+    const awayTeam = ev.teams?.away?.names?.long || "";
     const odds = ev.odds || {};
 
     const bookmakerMap = {};
 
-    function addOddToBookmaker(oddID, marketKey, outcomeName, pointField) {
+    function addOdd(oddID, marketKey, outcomeName) {
       const oddData = odds[oddID];
       if (!oddData?.byBookmaker) return;
+
       for (const [bmKey, bmData] of Object.entries(oddData.byBookmaker)) {
         if (!bmData?.available) continue;
         const rawOdds = Number(bmData.odds);
         if (!rawOdds || Number.isNaN(rawOdds)) continue;
 
-        // Convertir American a decimal si es necesario
-        let decimalOdds;
-        if (rawOdds > 0) {
-          decimalOdds = rawOdds / 100 + 1;
-        } else if (rawOdds < 0) {
-          decimalOdds = 100 / Math.abs(rawOdds) + 1;
-        } else {
-          continue;
-        }
+        // Convertir American → Decimal
+        let price;
+        if (rawOdds > 0) price = rawOdds / 100 + 1;
+        else if (rawOdds < 0) price = 100 / Math.abs(rawOdds) + 1;
+        else continue;
 
         if (!bookmakerMap[bmKey]) {
           bookmakerMap[bmKey] = { key: bmKey.toLowerCase(), title: bmKey, markets: {} };
@@ -831,33 +820,41 @@ async function fetchOddsApiEvents() {
           bookmakerMap[bmKey].markets[marketKey] = { key: marketKey, outcomes: [] };
         }
 
-        const outcome = { name: outcomeName, price: decimalOdds };
-        const point = bmData[pointField] ?? oddData[pointField] ?? null;
-        if (point !== null && point !== undefined) outcome.point = Number(point);
+        const outcome = { name: outcomeName, price };
+
+        // Spread: el point viene del campo "spread" del bookmaker, o "bookSpread" del odd
+        if (marketKey === "spreads") {
+          const point = bmData.spread ?? oddData.bookSpread ?? null;
+          if (point !== null) outcome.point = Number(point);
+        }
+
+        // Totals: el point viene del campo "overUnder" del bookmaker, o "bookOverUnder" del odd
+        if (marketKey === "totals") {
+          const point = bmData.overUnder ?? oddData.bookOverUnder ?? null;
+          if (point !== null) outcome.point = Number(point);
+        }
 
         bookmakerMap[bmKey].markets[marketKey].outcomes.push(outcome);
       }
     }
 
-    addOddToBookmaker("points-home-game-ml-home", "h2h", homeTeam, null);
-    addOddToBookmaker("points-away-game-ml-away", "h2h", awayTeam, null);
-    addOddToBookmaker("points-home-game-sp-home", "spreads", homeTeam, "spread");
-    addOddToBookmaker("points-away-game-sp-away", "spreads", awayTeam, "spread");
-    addOddToBookmaker("points-all-game-ou-over",  "totals", "over",    "overUnder");
-    addOddToBookmaker("points-all-game-ou-under", "totals", "under",   "overUnder");
-
-    const bookmakers = Object.values(bookmakerMap).map(bm => ({
-      key: bm.key,
-      title: bm.title,
-      markets: Object.values(bm.markets)
-    }));
+    addOdd("points-home-game-ml-home", "h2h",     homeTeam);
+    addOdd("points-away-game-ml-away", "h2h",     awayTeam);
+    addOdd("points-home-game-sp-home", "spreads", homeTeam);
+    addOdd("points-away-game-sp-away", "spreads", awayTeam);
+    addOdd("points-all-game-ou-over",  "totals",  "over");
+    addOdd("points-all-game-ou-under", "totals",  "under");
 
     return {
       id: ev.eventID,
       home_team: homeTeam,
       away_team: awayTeam,
-      commence_time: ev.startTime,
-      bookmakers
+      commence_time: ev.status?.startsAt,
+      bookmakers: Object.values(bookmakerMap).map(bm => ({
+        key: bm.key,
+        title: bm.title,
+        markets: Object.values(bm.markets)
+      }))
     };
   });
 
