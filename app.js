@@ -11,6 +11,8 @@ const BOOKMAKER_PRIORITY = ["1xbet", "bet365", "betsson", "stake", "coolbet"];
 
 let oddsCache = null;
 let oddsCacheTime = 0;
+let leagueProfilesCache = null;
+let scoreboardCache = [];
 
 function openModal() {
   if (!modal) return;
@@ -54,7 +56,6 @@ function parseRecord(recordText) {
 function getStatValue(entry, statNames) {
   if (!entry?.stats) return "Pendiente";
   const names = Array.isArray(statNames) ? statNames : [statNames];
-
   for (const name of names) {
     const stat = entry.stats.find(
       s => String(s?.name || "").toLowerCase() === String(name).toLowerCase()
@@ -66,7 +67,6 @@ function getStatValue(entry, statNames) {
       return String(stat.value);
     }
   }
-
   return "Pendiente";
 }
 
@@ -153,9 +153,7 @@ function renderFormChips(games) {
   if (!games?.length) {
     return `<div class="form-chips empty"><span class="form-empty">Sin datos</span></div>`;
   }
-
   const ordered = [...games].reverse();
-
   return `
     <div class="form-chips">
       ${ordered.map(game => `
@@ -173,30 +171,23 @@ function renderFormChips(games) {
 function getTeamGameInfo(event, teamId) {
   const comp = event?.competitions?.[0];
   if (!comp) return null;
-
   const competitors = comp?.competitors || [];
   const team = competitors.find(c => String(c?.team?.id || c?.id || "") === String(teamId));
   const opponent = competitors.find(c => String(c?.team?.id || c?.id || "") !== String(teamId));
-
   if (!team || !opponent) return null;
-
   const rawTeamScore = team?.score;
   const rawOpponentScore = opponent?.score;
-
   const teamScore =
     typeof rawTeamScore === "object"
       ? toNumber(rawTeamScore?.value ?? rawTeamScore?.displayValue)
       : toNumber(rawTeamScore);
-
   const opponentScore =
     typeof rawOpponentScore === "object"
       ? toNumber(rawOpponentScore?.value ?? rawOpponentScore?.displayValue)
       : toNumber(rawOpponentScore);
-
   const date = event?.date || comp?.date || null;
   const statusType = comp?.status?.type || event?.status?.type || {};
   const completed = Boolean(statusType?.completed || statusType?.state === "post");
-
   return {
     id: event?.id || comp?.id || null,
     date,
@@ -215,7 +206,6 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standings
   const safeLookup = standingsLookup || { byTeamId: {}, byAbbr: {} };
   const events = normalizeGamesFromSchedule(data);
   const targetTime = gameDate ? new Date(gameDate).getTime() : Date.now();
-
   const recentGames = events
     .map(event => getTeamGameInfo(event, teamId))
     .filter(Boolean)
@@ -229,11 +219,9 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standings
         safeLookup.byTeamId?.[String(game.opponentId)] ||
         safeLookup.byAbbr?.[game.opponentAbbr] ||
         null;
-
       const opponentRecord = parseRecord(opponentEntry?.record || "");
       const opponentPct = opponentRecord?.pct ?? null;
       const opponentWeight = getOpponentWeight(opponentPct);
-
       return {
         ...game,
         opponentPct,
@@ -242,16 +230,12 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standings
         weightedDiff: (game.teamScore - game.opponentScore) * opponentWeight
       };
     });
-
   const wins = recentGames.filter(game => game.won === true).length;
   const losses = recentGames.filter(game => game.won === false).length;
-
   const scored = recentGames.map(game => game.teamScore);
   const allowed = recentGames.map(game => game.opponentScore);
-
   const weightedDiffAvg = average(recentGames.map(game => game.weightedDiff));
   const opponentPctAvg = average(recentGames.map(game => game.opponentPct).filter(v => v !== null));
-
   return {
     games: recentGames,
     record: recentGames.length ? `${wins}-${losses}` : "Pendiente",
@@ -265,7 +249,6 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standings
 function getVenueSplitForm(scheduleData, teamId, gameDate, venueType, sampleSize = 5) {
   const events = normalizeGamesFromSchedule(scheduleData);
   const targetTime = gameDate ? new Date(gameDate).getTime() : Date.now();
-
   const filtered = events
     .map(event => getTeamGameInfo(event, teamId))
     .filter(Boolean)
@@ -275,10 +258,8 @@ function getVenueSplitForm(scheduleData, teamId, gameDate, venueType, sampleSize
     .filter(game => game.homeAway === venueType)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, sampleSize);
-
   const wins = filtered.filter(game => game.won === true).length;
   const losses = filtered.filter(game => game.won === false).length;
-
   return {
     games: filtered,
     record: filtered.length ? `${wins}-${losses}` : "Pendiente",
@@ -289,11 +270,7 @@ function getVenueSplitForm(scheduleData, teamId, gameDate, venueType, sampleSize
 function getB2BStatus(data, teamId, gameDate) {
   const events = normalizeGamesFromSchedule(data);
   const targetTime = gameDate ? new Date(gameDate).getTime() : null;
-
-  if (!targetTime) {
-    return { isB2B: false, label: "No", detail: "Sin dato" };
-  }
-
+  if (!targetTime) return { isB2B: false, label: "No", detail: "Sin dato" };
   const previousGames = events
     .map(event => getTeamGameInfo(event, teamId))
     .filter(Boolean)
@@ -301,37 +278,25 @@ function getB2BStatus(data, teamId, gameDate) {
     .filter(game => game.date)
     .filter(game => new Date(game.date).getTime() < targetTime)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
   const previousGame = previousGames[0];
-
-  if (!previousGame) {
-    return { isB2B: false, label: "No", detail: "Descanso normal" };
-  }
-
+  if (!previousGame) return { isB2B: false, label: "No", detail: "Descanso normal" };
   const previousTime = new Date(previousGame.date).getTime();
   const diffHours = (targetTime - previousTime) / (1000 * 60 * 60);
-
-  if (diffHours > 48) {
-    return { isB2B: false, label: "No", detail: "Descanso normal" };
-  }
-
+  if (diffHours > 48) return { isB2B: false, label: "No", detail: "Descanso normal" };
   if (diffHours <= 30) {
     if (previousGame.homeAway === "home") return { isB2B: true, label: "Sí", detail: "B2B en casa" };
     if (previousGame.homeAway === "away") return { isB2B: true, label: "Sí", detail: "B2B con viaje" };
     return { isB2B: true, label: "Sí", detail: "B2B" };
   }
-
   return { isB2B: false, label: "No", detail: "Descanso normal" };
 }
 
 async function fetchTeamSchedule(teamId) {
   if (!teamId) return null;
-
   const urls = [
     `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/schedule`,
     `https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/schedule`
   ];
-
   for (const url of urls) {
     try {
       const response = await fetch(url);
@@ -342,13 +307,11 @@ async function fetchTeamSchedule(teamId) {
       console.warn("Schedule fetch failed:", url, error);
     }
   }
-
   return null;
 }
 
 function detectClincherFromText(text) {
   const t = String(text || "").toLowerCase();
-
   if (t.includes("eliminated") || t.includes("e --")) return "Eliminado";
   if (t.includes("clinched play-in") || t.includes("pb --")) return "Play-in asegurado";
   if (
@@ -358,16 +321,13 @@ function detectClincherFromText(text) {
     t.includes("y --") ||
     t.includes("z --")
   ) return "Clasificado a playoffs";
-
   return null;
 }
 
 function getContextFromConferencePosition(position, clincher = null) {
   if (clincher) return clincher;
-
   const pos = Number(position);
   if (Number.isNaN(pos)) return "Pendiente";
-
   if (pos >= 1 && pos <= 6) return "Zona de playoffs";
   if (pos >= 7 && pos <= 10) return "Zona de play-in";
   return "Fuera de postemporada";
@@ -378,7 +338,6 @@ async function fetchConferenceStandingsSorted() {
     "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings?type=0&level=2&sort=playoffseed:asc",
     "https://site.web.api.espn.com/apis/v2/sports/basketball/nba/standings?type=0&level=2&sort=playoffseed:asc"
   ];
-
   for (const url of urls) {
     try {
       const res = await fetch(url);
@@ -389,32 +348,26 @@ async function fetchConferenceStandingsSorted() {
       console.warn("Standings fetch failed:", url, error);
     }
   }
-
   return null;
 }
 
 function buildStandingsLookup(standingsData) {
   const groups = standingsData?.children || [];
-
   const entries = groups.flatMap(group => {
     const conference = getConferenceLabel(group?.name || "NBA");
     const standingsEntries = group?.standings?.entries || [];
-
     return standingsEntries.map((entry, index) => {
       const team = entry?.team || {};
       const record = getStatValue(entry, ["overall", "wins"]);
       const teamId = String(team?.id || "");
       const abbr = team?.abbreviation || "";
       const name = team?.displayName || "";
-
       const statsText = (entry?.stats || [])
         .map(stat => `${stat?.name || ""} ${stat?.displayValue || ""} ${stat?.description || ""}`)
         .join(" ");
-
       const noteText = typeof entry?.note === "string" ? entry.note : JSON.stringify(entry?.note || "");
       const combinedText = `${statsText} ${noteText} ${abbr} ${name}`;
       const clincher = detectClincherFromText(combinedText);
-
       return {
         rawEntry: entry,
         teamId,
@@ -427,23 +380,19 @@ function buildStandingsLookup(standingsData) {
       };
     });
   });
-
   const byTeamId = {};
   const byAbbr = {};
   const byName = {};
-
   for (const entry of entries) {
     if (entry.teamId) byTeamId[entry.teamId] = entry;
     if (entry.abbr) byAbbr[entry.abbr] = entry;
     if (entry.name) byName[entry.name] = entry;
   }
-
   return { entries, byTeamId, byAbbr, byName };
 }
 
 function formatStatusText(status) {
   const lower = String(status || "").toLowerCase();
-
   if (lower.includes("final")) return "Finalizado";
   if (lower.includes("in progress")) return "En progreso";
   if (lower.includes("scheduled")) return "Programado";
@@ -461,12 +410,10 @@ function formatGameTime(dateString) {
 
 async function fetchTeamSeasonStats(teamId) {
   if (!teamId) return null;
-
   const urls = [
     `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/statistics`,
     `https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${teamId}/statistics`
   ];
-
   for (const url of urls) {
     try {
       const res = await fetch(url);
@@ -477,7 +424,6 @@ async function fetchTeamSeasonStats(teamId) {
       console.warn("Team stats fetch failed:", url, error);
     }
   }
-
   return null;
 }
 
@@ -492,95 +438,72 @@ function normalizeStatLabel(value) {
 
 function collectAllTeamStats(statsData) {
   const raw = [];
-
   const categoryGroups = [
     ...(statsData?.results?.stats?.categories || []),
     ...(statsData?.statistics?.splits?.categories || []),
     ...(statsData?.splits?.categories || [])
   ];
-
   for (const category of categoryGroups) {
     if (Array.isArray(category?.stats)) raw.push(...category.stats);
   }
-
   const directArrays = [
     ...(Array.isArray(statsData?.results?.stats) ? statsData.results.stats : []),
     ...(Array.isArray(statsData?.statistics?.splits?.stats) ? statsData.statistics.splits.stats : []),
     ...(Array.isArray(statsData?.splits?.stats) ? statsData.splits.stats : [])
   ];
-
   raw.push(...directArrays);
-
   return raw.filter(Boolean);
 }
 
 function findStatValue(allStats, aliases, containsAliases = []) {
   if (!Array.isArray(allStats) || !allStats.length) return null;
-
   const normalizedAliases = aliases.map(normalizeStatLabel);
   const normalizedContains = containsAliases.map(normalizeStatLabel);
-
   for (const stat of allStats) {
     const candidates = [
-      stat?.name,
-      stat?.displayName,
-      stat?.shortDisplayName,
-      stat?.abbreviation,
-      stat?.description
+      stat?.name, stat?.displayName, stat?.shortDisplayName,
+      stat?.abbreviation, stat?.description
     ].map(normalizeStatLabel).filter(Boolean);
-
     const exactMatch = candidates.some(candidate => normalizedAliases.includes(candidate));
     if (exactMatch) return stat?.displayValue ?? stat?.value ?? null;
   }
-
   for (const stat of allStats) {
     const candidates = [
-      stat?.name,
-      stat?.displayName,
-      stat?.shortDisplayName,
-      stat?.abbreviation,
-      stat?.description
+      stat?.name, stat?.displayName, stat?.shortDisplayName,
+      stat?.abbreviation, stat?.description
     ].map(normalizeStatLabel).filter(Boolean);
-
     const partialMatch = candidates.some(candidate =>
       normalizedContains.some(alias => candidate.includes(alias))
     );
-
     if (partialMatch) return stat?.displayValue ?? stat?.value ?? null;
   }
-
   return null;
 }
 
 function getSeasonAllowedAverageFromSchedule(scheduleData, teamId) {
   const events = normalizeGamesFromSchedule(scheduleData);
-
   const completedGames = events
     .map(event => getTeamGameInfo(event, teamId))
     .filter(Boolean)
     .filter(game => game.completed)
     .filter(game => game.teamScore !== null && game.opponentScore !== null);
-
   if (!completedGames.length) return null;
   return average(completedGames.map(game => game.opponentScore));
 }
 
 function getSeasonScoredAverageFromSchedule(scheduleData, teamId) {
   const events = normalizeGamesFromSchedule(scheduleData);
-
   const completedGames = events
     .map(event => getTeamGameInfo(event, teamId))
     .filter(Boolean)
     .filter(game => game.completed)
     .filter(game => game.teamScore !== null && game.opponentScore !== null);
-
   if (!completedGames.length) return null;
   return average(completedGames.map(game => game.teamScore));
 }
 
 function extractTeamProfile(statsData, fallbackScheduleData = null, teamId = null) {
   const allStats = collectAllTeamStats(statsData);
-
   let ppg = toNumber(
     findStatValue(
       allStats,
@@ -588,62 +511,40 @@ function extractTeamProfile(statsData, fallbackScheduleData = null, teamId = nul
       ["points per game", "avg points", "ppg"]
     )
   );
-
   let oppPpg = toNumber(
     findStatValue(
       allStats,
-      [
-        "pointsallowedpergame",
-        "points allowed per game",
-        "opppointspergame",
-        "opp points per game",
-        "avgpointsallowed",
-        "papg",
-        "points allowed"
-      ],
-      [
-        "points allowed per game",
-        "opp points per game",
-        "points allowed",
-        "avg points allowed",
-        "opponent points"
-      ]
+      ["pointsallowedpergame", "points allowed per game", "opppointspergame",
+       "opp points per game", "avgpointsallowed", "papg", "points allowed"],
+      ["points allowed per game", "opp points per game", "points allowed",
+       "avg points allowed", "opponent points"]
     )
   );
-
   if (ppg === null && fallbackScheduleData && teamId) {
     ppg = getSeasonScoredAverageFromSchedule(fallbackScheduleData, teamId);
   }
-
   if (oppPpg === null && fallbackScheduleData && teamId) {
     oppPpg = getSeasonAllowedAverageFromSchedule(fallbackScheduleData, teamId);
   }
-
   return { ppg, oppPpg };
 }
 
 function getRankFromValue(value, values, higherBetter = true) {
   if (value === null || value === undefined || Number.isNaN(value)) return null;
-
   const cleaned = (Array.isArray(values) ? values : [])
     .filter(v => v !== null && v !== undefined && !Number.isNaN(v))
     .map(v => Number(v));
-
   if (!cleaned.length) return null;
-
   const sorted = [...cleaned].sort((a, b) => (higherBetter ? b - a : a - b));
   const index = sorted.findIndex(v => Number(v) === Number(value));
-
   return index >= 0 ? index + 1 : null;
 }
 
 function rankTierLabel(rank, totalTeams = 30) {
   const num = Number(rank);
   if (Number.isNaN(num) || num <= 0) return "media";
-
   const topCut = Math.ceil(totalTeams / 3);
   const midCut = Math.ceil((totalTeams * 2) / 3);
-
   if (num <= topCut) return "fuerte";
   if (num <= midCut) return "media";
   return "mala";
@@ -651,73 +552,52 @@ function rankTierLabel(rank, totalTeams = 30) {
 
 function buildLeagueProfilesMap(teamProfiles) {
   const validProfiles = teamProfiles.filter(team =>
-    team?.profile &&
-    team.profile.ppg !== null &&
-    team.profile.oppPpg !== null
+    team?.profile && team.profile.ppg !== null && team.profile.oppPpg !== null
   );
-
-  const offenseValues = validProfiles
-    .map(team => team.profile.ppg)
-    .filter(v => v !== null && !Number.isNaN(v));
-
-  const defenseValues = validProfiles
-    .map(team => team.profile.oppPpg)
-    .filter(v => v !== null && !Number.isNaN(v));
-
+  const offenseValues = validProfiles.map(team => team.profile.ppg).filter(v => v !== null && !Number.isNaN(v));
+  const defenseValues = validProfiles.map(team => team.profile.oppPpg).filter(v => v !== null && !Number.isNaN(v));
   const totalOffenseTeams = offenseValues.length || 30;
   const totalDefenseTeams = defenseValues.length || 30;
-
   const result = {};
-
   for (const team of teamProfiles) {
     const offenseRank = getRankFromValue(team.profile?.ppg ?? null, offenseValues, true);
     const defenseRank = getRankFromValue(team.profile?.oppPpg ?? null, defenseValues, false);
-
     let offenseLabel = rankTierLabel(offenseRank, totalOffenseTeams);
     let defenseLabel = rankTierLabel(defenseRank, totalDefenseTeams);
-
     if (team.profile?.ppg === null) offenseLabel = "media";
     if (team.profile?.oppPpg === null) defenseLabel = "media";
-
     result[String(team.teamId)] = {
       offenseRank,
       defenseRank,
       label: `Ataque ${offenseLabel} | Defensa ${defenseLabel}`
     };
   }
-
   return result;
 }
 
 async function getLeagueProfilesMap(standingsData) {
   if (leagueProfilesCache) return leagueProfilesCache;
   if (!standingsData?.children?.length) return {};
-
   const leagueTeamIds = standingsData.children
     .flatMap(group => group?.standings?.entries || [])
     .map(entry => String(entry?.team?.id || ""))
     .filter(Boolean);
-
   const leagueProfilesRaw = await Promise.all(
     leagueTeamIds.map(async (teamId) => {
       const [stats, schedule] = await Promise.all([
         fetchTeamSeasonStats(teamId),
         fetchTeamSchedule(teamId)
       ]);
-
-      return {
-        teamId,
-        profile: extractTeamProfile(stats, schedule, teamId)
-      };
+      return { teamId, profile: extractTeamProfile(stats, schedule, teamId) };
     })
   );
-
   leagueProfilesCache = buildLeagueProfilesMap(leagueProfilesRaw);
   return leagueProfilesCache;
 }
 
 function getCompetitorsFromEventLike(eventLike) {
-  return eventLike?.competitions?.[0]?.competitors || eventLike?.header?.competitions?.[0]?.competitors || [];
+  return eventLike?.competitions?.[0]?.competitors ||
+    eventLike?.header?.competitions?.[0]?.competitors || [];
 }
 
 function findGameInScoreboardCache(gameId) {
@@ -729,7 +609,6 @@ async function fetchGameSummary(gameId) {
     `https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`,
     `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`
   ];
-
   for (const url of urls) {
     try {
       const res = await fetch(url);
@@ -741,7 +620,6 @@ async function fetchGameSummary(gameId) {
       console.warn("Summary fetch failed:", url, error);
     }
   }
-
   return null;
 }
 
@@ -780,10 +658,10 @@ function getBookmakerDisplayName(key, title) {
   return title || key || "Casa";
 }
 
+// ─── SPORTSGAMEODDS API ────────────────────────────────────────────────────────
 async function fetchOddsApiEvents() {
   const now = Date.now();
-  const TTL = 1000 * 60 * 60;
-  if (oddsCache && now - oddsCacheTime < TTL) return oddsCache;
+  if (oddsCache && now - oddsCacheTime < 1000 * 60 * 60) return oddsCache;
 
   const url = `https://api.sportsgameodds.com/v2/events?leagueID=NBA&oddsAvailable=true&apiKey=${ODDS_API_KEY}`;
   const res = await fetch(url);
@@ -795,42 +673,30 @@ async function fetchOddsApiEvents() {
     const homeTeam = ev.teams?.home?.names?.long || "";
     const awayTeam = ev.teams?.away?.names?.long || "";
     const odds = ev.odds || {};
-
     const bookmakerMap = {};
 
     function addOdd(oddID, marketKey, outcomeName) {
       const oddData = odds[oddID];
       if (!oddData?.byBookmaker) return;
-
       for (const [bmKey, bmData] of Object.entries(oddData.byBookmaker)) {
         if (!bmData?.available) continue;
         const rawOdds = Number(bmData.odds);
         if (!rawOdds || Number.isNaN(rawOdds)) continue;
-
         let price;
         if (rawOdds > 0) price = rawOdds / 100 + 1;
         else if (rawOdds < 0) price = 100 / Math.abs(rawOdds) + 1;
         else continue;
-
-        if (!bookmakerMap[bmKey]) {
-          bookmakerMap[bmKey] = { key: bmKey.toLowerCase(), title: bmKey, markets: {} };
-        }
-        if (!bookmakerMap[bmKey].markets[marketKey]) {
-          bookmakerMap[bmKey].markets[marketKey] = { key: marketKey, outcomes: [] };
-        }
-
+        if (!bookmakerMap[bmKey]) bookmakerMap[bmKey] = { key: bmKey.toLowerCase(), title: bmKey, markets: {} };
+        if (!bookmakerMap[bmKey].markets[marketKey]) bookmakerMap[bmKey].markets[marketKey] = { key: marketKey, outcomes: [] };
         const outcome = { name: outcomeName, price };
-
         if (marketKey === "spreads") {
-          const point = bmData.spread ?? oddData.bookSpread ?? null;
-          if (point !== null) outcome.point = Number(point);
+          const pt = bmData.spread ?? oddData.bookSpread ?? null;
+          if (pt !== null) outcome.point = Number(pt);
         }
-
         if (marketKey === "totals") {
-          const point = bmData.overUnder ?? oddData.bookOverUnder ?? null;
-          if (point !== null) outcome.point = Number(point);
+          const pt = bmData.overUnder ?? oddData.bookOverUnder ?? null;
+          if (pt !== null) outcome.point = Number(pt);
         }
-
         bookmakerMap[bmKey].markets[marketKey].outcomes.push(outcome);
       }
     }
@@ -848,8 +714,7 @@ async function fetchOddsApiEvents() {
       away_team: awayTeam,
       commence_time: ev.status?.startsAt,
       bookmakers: Object.values(bookmakerMap).map(bm => ({
-        key: bm.key,
-        title: bm.title,
+        key: bm.key, title: bm.title,
         markets: Object.values(bm.markets)
       }))
     };
@@ -859,59 +724,32 @@ async function fetchOddsApiEvents() {
   return oddsCache;
 }
 
+// ─── MATCH SCORING ────────────────────────────────────────────────────────────
 function buildOddsApiEventMatchScore(oddsEvent, homeName, awayName, commenceTime = null) {
   const oddsHome = normalizeString(oddsEvent?.home_team);
   const oddsAway = normalizeString(oddsEvent?.away_team);
   const targetHome = normalizeString(homeName);
   const targetAway = normalizeString(awayName);
-
   let score = 0;
-
-  if (!oddsHome || !oddsAway || !targetHome || !targetAway) return 0;
-
   if (oddsHome === targetHome) score += 5;
-  else if (oddsHome.includes(targetHome) || targetHome.includes(oddsHome)) score += 3;
-
   if (oddsAway === targetAway) score += 5;
-  else if (oddsAway.includes(targetAway) || targetAway.includes(oddsAway)) score += 3;
-
-  if (oddsHome === targetAway || oddsAway === targetHome) score += 2;
-
   if (commenceTime && oddsEvent?.commence_time) {
-    const diff = Math.abs(
-      new Date(oddsEvent.commence_time).getTime() - new Date(commenceTime).getTime()
-    );
-    if (diff <= 1000 * 60 * 240) score += 2;
-    else if (diff <= 1000 * 60 * 480) score += 1;
+    const diff = Math.abs(new Date(oddsEvent.commence_time).getTime() - new Date(commenceTime).getTime());
+    if (diff <= 1000 * 60 * 180) score += 2;
   }
-
   return score;
 }
 
 function findMatchingOddsEvent(oddsEvents, homeName, awayName, commenceTime = null) {
   if (!Array.isArray(oddsEvents) || !oddsEvents.length) return null;
-
   const scored = oddsEvents
     .map(event => ({
       event,
       score: buildOddsApiEventMatchScore(event, homeName, awayName, commenceTime)
     }))
-    .filter(item => item.score >= 6)
+    .filter(item => item.score >= 10)
     .sort((a, b) => b.score - a.score);
-
-  if (scored.length) return scored[0].event;
-
-  const targetHome = normalizeString(homeName);
-  const targetAway = normalizeString(awayName);
-
-  return oddsEvents.find(event => {
-    const eh = normalizeString(event?.home_team);
-    const ea = normalizeString(event?.away_team);
-    return (
-      (eh && (eh.includes(targetHome) || targetHome.includes(eh))) ||
-      (ea && (ea.includes(targetAway) || targetAway.includes(ea)))
-    );
-  }) || null;
+  return scored[0]?.event || null;
 }
 
 function normalizeBookmakers(bookmakers) {
@@ -943,11 +781,7 @@ function classifyBetStrength(edgeGap, odds) {
 }
 
 function makeNoBet(reason) {
-  return {
-    selection: null,
-    strength: { level: "No bet", stake: "0%" },
-    reason
-  };
+  return { selection: null, strength: { level: "No bet", stake: "0%" }, reason };
 }
 
 function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanText) {
@@ -976,8 +810,7 @@ function renderBetRecommendationBlock(recommendation, edgeText, autoNote, leanTe
   `;
 }
 
-// ─── PICK LOGIC ──────────────────────────────────────────────────────────────
-
+// ─── SIDE RECOMMENDATION (con líneas alternativas de spread) ──────────────────
 function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin = null) {
   const ordered = sortBookmakersByPriority(bookmakers);
   const margin = Number(estimatedMargin);
@@ -985,8 +818,8 @@ function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin
   const marginAbs = hasMargin ? Math.abs(margin) : 0;
 
   for (const bookmaker of ordered) {
-    const h2h     = bookmaker?.markets?.find(m => m?.key === "h2h");
-    const spreads = bookmaker?.markets?.find(m => m?.key === "spreads");
+    const h2h       = bookmaker?.markets?.find(m => m?.key === "h2h");
+    const spreads   = bookmaker?.markets?.find(m => m?.key === "spreads");
 
     const mlOutcome     = findOutcomeByTeamName(h2h?.outcomes     || [], preferredSideName);
     const spreadOutcome = findOutcomeByTeamName(spreads?.outcomes || [], preferredSideName);
@@ -1012,7 +845,7 @@ function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin
       };
     }
 
-    // 2) ML < 1.50 → busca spread oficial
+    // 2) ML < 1.50 → busca spread oficial primero
     if (hasPlayableSpread && hasMargin && marginAbs >= 4) {
       const spreadAbs = Math.abs(spreadPoint);
       const spreadIsReasonable = spreadPoint > 0 || spreadAbs <= Math.max(1.5, marginAbs - 1.5);
@@ -1028,13 +861,14 @@ function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin
         };
       }
 
-      // 3) Spread oficial agresivo → baja línea de 0.5 en 0.5 hasta encontrar valor
+      // 3) Spread oficial demasiado agresivo → bajar de 0.5 en 0.5 hasta encontrar valor
       const step = 0.5;
       const maxAlt = -1.5;
       let candidate = parseFloat((spreadPoint + step).toFixed(1));
 
       while (candidate <= maxAlt) {
         const candidateAbs = Math.abs(candidate);
+        // Cuanto más conservadora la línea alternativa, más sube la cuota estimada
         const diffFromOfficial = Math.abs(spreadPoint) - candidateAbs;
         const estimatedPrice = Math.min(2.10, 1.91 + diffFromOfficial * 0.04);
         const edgeCoversCandidate = marginAbs >= candidateAbs + 2;
@@ -1054,7 +888,7 @@ function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin
       }
     }
 
-    // 4) Spread sin margen como último recurso
+    // 4) Spread sin margen estimado como último recurso
     if (hasPlayableSpread) {
       return {
         type: "spread",
@@ -1070,6 +904,7 @@ function selectSideRecommendation(bookmakers, preferredSideName, estimatedMargin
   return null;
 }
 
+// ─── TOTAL RECOMMENDATION (con líneas alternativas) ───────────────────────────
 function selectTotalRecommendation(bookmakers, projectedTotal, allowAltLines = false) {
   if (projectedTotal === null) return null;
   const ordered = sortBookmakersByPriority(bookmakers);
@@ -1104,7 +939,7 @@ function selectTotalRecommendation(bookmakers, projectedTotal, allowAltLines = f
       };
     }
 
-    // Líneas alternativas de over si el buffer de 6 no alcanza
+    // Líneas alternativas de Over si el buffer de 6 no se alcanza
     if (allowAltLines && !Number.isNaN(overPoint) && !Number.isNaN(overPrice)) {
       const step = 0.5;
       let altLine = overPoint - step;
@@ -1129,6 +964,7 @@ function selectTotalRecommendation(bookmakers, projectedTotal, allowAltLines = f
   return null;
 }
 
+// ─── LÓGICA PRINCIPAL DE RECOMENDACIÓN ────────────────────────────────────────
 function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, homeEdge, projectedTotal }) {
   if (!oddsEvent?.bookmakers?.length) {
     return makeNoBet("No se encontraron cuotas disponibles para este partido.");
@@ -1138,14 +974,14 @@ function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, home
   const sideThreshold = 2;
   const totalThreshold = 1;
 
-  // ── CASO 1: Favorito claro ────────────────────────────────────────────────
+  // ── CASO 1: Favorito claro por estadísticas ──────────────────────────────
   if (awayEdge >= homeEdge + sideThreshold || homeEdge >= awayEdge + sideThreshold) {
     const favoriteName    = awayEdge >= homeEdge + sideThreshold ? awayName  : homeName;
     const underdogName    = awayEdge >= homeEdge + sideThreshold ? homeName  : awayName;
-    const edgeDiff        = Math.abs(awayEdge - homeEdge);
+    const edgeDiff        = awayEdge >= homeEdge + sideThreshold ? awayEdge - homeEdge : homeEdge - awayEdge;
     const estimatedMargin = edgeDiff * 1.5;
 
-    // ML favorito >= 1.50 → pick directo
+    // Busca ML favorito (si >= 1.50)
     const favoriteML = sortBookmakersByPriority(oddsEvent.bookmakers).reduce((found, bm) => {
       if (found) return found;
       const h2h = bm?.markets?.find(m => m?.key === "h2h");
@@ -1166,42 +1002,44 @@ function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, home
       return {
         selection,
         strength: classifyBetStrength(edgeGap, selection.odds),
-        reason: `${favoriteName} tiene ventaja estadística clara. ML con cuota jugable.`
+        reason: `${favoriteName} tiene ventaja estadística clara sobre ${underdogName}. ML con cuota jugable.`
       };
     }
 
-    // ML < 1.50 → spread oficial o alternativo del favorito
+    // ML < 1.50 → busca spread (oficial o alternativo bajando de 0.5 en 0.5)
     const spreadSelection = selectSideRecommendation(oddsEvent.bookmakers, favoriteName, estimatedMargin);
     if (spreadSelection) {
-      const altNote = spreadSelection.isAltLine ? " Línea alternativa más conservadora dado el precio del ML." : "";
+      const altNote = spreadSelection.isAltLine
+        ? " Línea alternativa más conservadora — el ML del favorito no ofrece valor."
+        : "";
       return {
         selection: spreadSelection,
         strength: classifyBetStrength(edgeGap, spreadSelection.odds),
-        reason: `${favoriteName} es favorito claro pero su ML está por debajo de 1.50. Spread con valor.${altNote}`
+        reason: `${favoriteName} es favorito claro pero su ML es inferior a 1.50. Spread con valor encontrado.${altNote}`
       };
     }
 
-    // Spread positivo del underdog
+    // Underdog con spread positivo
     const underdogSpread = selectSideRecommendation(oddsEvent.bookmakers, underdogName, -estimatedMargin);
     if (underdogSpread && underdogSpread.line > 0) {
       return {
         selection: underdogSpread,
         strength: classifyBetStrength(edgeGap, underdogSpread.odds),
-        reason: `El favorito no ofrece cuota jugable. ${underdogName} con spread positivo puede tener valor.`
+        reason: `El favorito ${favoriteName} no ofrece cuota jugable. ${underdogName} con spread positivo tiene valor si el partido permanece dentro del rango.`
       };
     }
 
-    // Fallback a total
+    // Fallback a totals
     const totalSelection = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal, true);
     if (totalSelection) {
       return {
         selection: totalSelection,
         strength: classifyBetStrength(2, totalSelection.odds),
-        reason: `Sin spread con valor en lados. Total proyectado respalda el ritmo de anotación.`
+        reason: `No se encontró spread con valor para ninguno de los lados. El total proyectado respalda este ángulo.`
       };
     }
 
-    return makeNoBet(`${favoriteName} domina estadísticamente pero ninguna cuota ofrece valor ≥ 1.50.`);
+    return makeNoBet(`${favoriteName} domina estadísticamente pero ninguna cuota alcanza valor mínimo (≥1.50).`);
   }
 
   // ── CASO 2: Partido equilibrado → busca valor en totals ──────────────────
@@ -1211,7 +1049,7 @@ function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, home
       return {
         selection: totalSelection,
         strength: classifyBetStrength(2, totalSelection.odds),
-        reason: "Matchup equilibrado. El valor aparece en el total según el ritmo de anotación proyectado."
+        reason: "Matchup equilibrado entre ambos equipos. El valor aparece en el total según el ritmo de anotación proyectado."
       };
     }
     return makeNoBet("Matchup equilibrado y el total proyectado no supera la línea con margen suficiente.");
@@ -1223,18 +1061,14 @@ function buildOddsRecommendation({ oddsEvent, awayName, homeName, awayEdge, home
     return {
       selection: totalFallback,
       strength: classifyBetStrength(2, totalFallback.odds),
-      reason: "Lectura intermedia en lados. El total proyectado muestra valor en este mercado."
+      reason: "La lectura es intermedia en lados. Se aprovecha el total donde el ritmo proyectado muestra valor claro."
     };
   }
 
   return makeNoBet("La lectura es intermedia y ningún mercado ofrece un ángulo claro con valor suficiente.");
 }
 
-// ─── SCOREBOARD & GAME CARDS ─────────────────────────────────────────────────
-
-let leagueProfilesCache = null;
-let scoreboardCache = [];
-
+// ─── SCOREBOARD ───────────────────────────────────────────────────────────────
 function getLocalScoreboardDate(offsetDays = 0) {
   const now = new Date();
   const local = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays);
@@ -1249,7 +1083,6 @@ async function fetchScoreboardByDate(dateStr) {
     `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr}`,
     `https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr}`
   ];
-
   for (const url of urls) {
     try {
       const response = await fetch(url);
@@ -1260,28 +1093,23 @@ async function fetchScoreboardByDate(dateStr) {
       console.warn("Scoreboard fetch failed:", url, error);
     }
   }
-
   return { events: [] };
 }
 
 async function loadNBAGames() {
   if (!statusEl || !gamesContainer) return;
-
   statusEl.textContent = "Cargando partidos NBA reales...";
   gamesContainer.innerHTML = "";
 
   try {
-    const todayDate = getLocalScoreboardDate(0);
+    const todayDate    = getLocalScoreboardDate(0);
     const tomorrowDate = getLocalScoreboardDate(1);
-
-    let data = await fetchScoreboardByDate(todayDate);
+    let data   = await fetchScoreboardByDate(todayDate);
     let events = data?.events || [];
-
     if (!events.length) {
-      data = await fetchScoreboardByDate(tomorrowDate);
+      data   = await fetchScoreboardByDate(tomorrowDate);
       events = data?.events || [];
     }
-
     scoreboardCache = events;
 
     if (!events.length) {
@@ -1294,9 +1122,8 @@ async function loadNBAGames() {
     gamesContainer.innerHTML = "";
 
     for (const event of events) {
-      const comp = event.competitions?.[0] || null;
+      const comp        = event.competitions?.[0] || null;
       const competitors = comp?.competitors || [];
-
       const home = competitors.find(t => t.homeAway === "home");
       const away = competitors.find(t => t.homeAway === "away");
 
@@ -1305,68 +1132,50 @@ async function loadNBAGames() {
 
       const homeScoreRaw = home?.score ?? "-";
       const awayScoreRaw = away?.score ?? "-";
+      const homeScore = typeof homeScoreRaw === "object" ? homeScoreRaw?.displayValue ?? "-" : homeScoreRaw;
+      const awayScore = typeof awayScoreRaw === "object" ? awayScoreRaw?.displayValue ?? "-" : awayScoreRaw;
 
-      const homeScore =
-        typeof homeScoreRaw === "object"
-          ? homeScoreRaw?.displayValue ?? "-"
-          : homeScoreRaw;
-
-      const awayScore =
-        typeof awayScoreRaw === "object"
-          ? awayScoreRaw?.displayValue ?? "-"
-          : awayScoreRaw;
-
-      const rawStatus = event.status?.type?.description || "Sin estado";
+      const rawStatus  = event.status?.type?.description || "Sin estado";
       const gameStatus = formatStatusText(rawStatus);
-      const period = event.status?.period || null;
-      const clock = event.status?.displayClock || "";
+      const period     = event.status?.period || null;
+      const clock      = event.status?.displayClock || "";
       const statusState = event.status?.type?.state || "";
 
-      const isFinal = statusState === "post" || gameStatus === "Finalizado";
-      const isLive = statusState === "in" || gameStatus === "En progreso";
+      const isFinal    = statusState === "post" || gameStatus === "Finalizado";
+      const isLive     = statusState === "in"   || gameStatus === "En progreso";
       const isScheduled = !isFinal && !isLive;
 
       let badgeText = "Programado";
-      if (isFinal) {
-        badgeText = "Finalizado";
-      } else if (isLive) {
-        badgeText = `En progreso · Q${period || "-"} · ${clock || ""}`.trim();
-      } else {
-        badgeText = `Programado · ${formatGameTime(event.date)}`;
-      }
+      if (isFinal)      badgeText = "Finalizado";
+      else if (isLive)  badgeText = `En progreso · Q${period || "-"} · ${clock || ""}`.trim();
+      else              badgeText = `Programado · ${formatGameTime(event.date)}`;
 
       const card = document.createElement("article");
       card.className = "game-card";
-
       card.innerHTML = `
         <div class="game-top">
           <span class="game-status">${escapeHtml(gameStatus)}</span>
           <span class="game-date">${escapeHtml(formatGameTime(event.date))}</span>
         </div>
-
         <div class="teams">
           <div class="team-row">
             <span class="team-name">${escapeHtml(awayName)}</span>
-            <strong class="team-score">${escapeHtml(awayScore)}</strong>
+            <strong class="team-score">${escapeHtml(String(awayScore))}</strong>
           </div>
-
           <div class="team-row">
             <span class="team-name">${escapeHtml(homeName)}</span>
-            <strong class="team-score">${escapeHtml(homeScore)}</strong>
+            <strong class="team-score">${escapeHtml(String(homeScore))}</strong>
           </div>
         </div>
-
         <div class="live-extra ${isFinal ? "is-final" : isScheduled ? "is-scheduled" : ""}">
           ${escapeHtml(badgeText)}
         </div>
-
         <div class="game-actions">
           <button class="analyze-btn" data-game-id="${escapeHtml(event.id)}">
             Analizar partido
           </button>
         </div>
       `;
-
       gamesContainer.appendChild(card);
     }
   } catch (error) {
@@ -1376,16 +1185,16 @@ async function loadNBAGames() {
   }
 }
 
+// ─── ANÁLISIS DE PARTIDO ──────────────────────────────────────────────────────
 async function analyzeGame(gameId) {
   if (!analysisPanel) return;
-
   openModal();
   analysisPanel.innerHTML = "<p>Cargando análisis pregame...</p>";
 
   try {
-    const summaryResult = await fetchGameSummary(gameId);
+    const summaryResult  = await fetchGameSummary(gameId);
     const scoreboardEvent = findGameInScoreboardCache(gameId);
-    const summaryData = summaryResult || buildFallbackSummaryFromScoreboardEvent(scoreboardEvent);
+    const summaryData    = summaryResult || buildFallbackSummaryFromScoreboardEvent(scoreboardEvent);
 
     const competitors = getCompetitorsFromEventLike(summaryData);
     if (!competitors.length) {
@@ -1393,11 +1202,7 @@ async function analyzeGame(gameId) {
       return;
     }
 
-    const comp =
-      summaryData?.header?.competitions?.[0] ||
-      scoreboardEvent?.competitions?.[0] ||
-      {};
-
+    const comp = summaryData?.header?.competitions?.[0] || scoreboardEvent?.competitions?.[0] || {};
     const home = competitors.find(team => team.homeAway === "home");
     const away = competitors.find(team => team.homeAway === "away");
 
@@ -1406,14 +1211,13 @@ async function analyzeGame(gameId) {
       return;
     }
 
-    const homeName = home?.team?.displayName || "Local";
-    const awayName = away?.team?.displayName || "Visitante";
-    const homeAbbr = home?.team?.abbreviation || "";
-    const awayAbbr = away?.team?.abbreviation || "";
+    const homeName   = home?.team?.displayName || "Local";
+    const awayName   = away?.team?.displayName || "Visitante";
+    const homeAbbr   = home?.team?.abbreviation || "";
+    const awayAbbr   = away?.team?.abbreviation || "";
     const homeTeamId = getTeamIdFromCompetitor(home);
     const awayTeamId = getTeamIdFromCompetitor(away);
-
-    const gameDate = comp?.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
+    const gameDate   = comp?.date ? new Date(comp.date).toLocaleString("es-CL") : "Pendiente";
 
     const [standingsRes, awayScheduleRes, homeScheduleRes, oddsRes] = await Promise.allSettled([
       fetchConferenceStandingsSorted(),
@@ -1422,103 +1226,74 @@ async function analyzeGame(gameId) {
       fetchOddsApiEvents()
     ]);
 
-    const standingsData = standingsRes.status === "fulfilled" ? standingsRes.value : null;
-
-    const standingsLookup = standingsData
-      ? buildStandingsLookup(standingsData)
-      : createEmptyStandingsLookup();
+    const standingsData   = standingsRes.status === "fulfilled" ? standingsRes.value : null;
+    const standingsLookup = standingsData ? buildStandingsLookup(standingsData) : createEmptyStandingsLookup();
 
     let leagueProfilesMap = {};
     try {
       leagueProfilesMap = standingsData ? await getLeagueProfilesMap(standingsData) : {};
     } catch (error) {
       console.warn("League profiles failed:", error);
-      leagueProfilesMap = {};
     }
 
     const awaySchedule = awayScheduleRes.status === "fulfilled" ? awayScheduleRes.value : null;
     const homeSchedule = homeScheduleRes.status === "fulfilled" ? homeScheduleRes.value : null;
 
-    const awayEntry =
-      standingsLookup.byTeamId[String(awayTeamId)] ||
-      standingsLookup.byAbbr[awayAbbr] ||
-      standingsLookup.byName[awayName] ||
-      null;
+    const awayEntry = standingsLookup.byTeamId[String(awayTeamId)] || standingsLookup.byAbbr[awayAbbr] || standingsLookup.byName[awayName] || null;
+    const homeEntry = standingsLookup.byTeamId[String(homeTeamId)] || standingsLookup.byAbbr[homeAbbr] || standingsLookup.byName[homeName] || null;
 
-    const homeEntry =
-      standingsLookup.byTeamId[String(homeTeamId)] ||
-      standingsLookup.byAbbr[homeAbbr] ||
-      standingsLookup.byName[homeName] ||
-      null;
-
-    const awayRecent5 = getRecentFormFromSchedule(awaySchedule, awayTeamId, comp?.date, 5, standingsLookup);
-    const homeRecent5 = getRecentFormFromSchedule(homeSchedule, homeTeamId, comp?.date, 5, standingsLookup);
-
+    const awayRecent5    = getRecentFormFromSchedule(awaySchedule, awayTeamId, comp?.date, 5, standingsLookup);
+    const homeRecent5    = getRecentFormFromSchedule(homeSchedule, homeTeamId, comp?.date, 5, standingsLookup);
     const awayVenueSplit = getVenueSplitForm(awaySchedule, awayTeamId, comp?.date, "away", 5);
     const homeVenueSplit = getVenueSplitForm(homeSchedule, homeTeamId, comp?.date, "home", 5);
+    const awayB2B        = getB2BStatus(awaySchedule, awayTeamId, comp?.date);
+    const homeB2B        = getB2BStatus(homeSchedule, homeTeamId, comp?.date);
+    const awayContext    = getContextFromConferencePosition(awayEntry?.conferencePosition, awayEntry?.clincher || null);
+    const homeContext    = getContextFromConferencePosition(homeEntry?.conferencePosition, homeEntry?.clincher || null);
 
-    const awayB2B = getB2BStatus(awaySchedule, awayTeamId, comp?.date);
-    const homeB2B = getB2BStatus(homeSchedule, homeTeamId, comp?.date);
-
-    const awayContext = getContextFromConferencePosition(awayEntry?.conferencePosition, awayEntry?.clincher || null);
-    const homeContext = getContextFromConferencePosition(homeEntry?.conferencePosition, homeEntry?.clincher || null);
-
-    const awayProfileRanked = leagueProfilesMap[String(awayTeamId)] || {
-      offenseRank: null,
-      defenseRank: null,
-      label: "Ataque medio | Defensa media"
-    };
-
-    const homeProfileRanked = leagueProfilesMap[String(homeTeamId)] || {
-      offenseRank: null,
-      defenseRank: null,
-      label: "Ataque medio | Defensa media"
-    };
+    const awayProfileRanked = leagueProfilesMap[String(awayTeamId)] || { offenseRank: null, defenseRank: null, label: "Ataque medio | Defensa media" };
+    const homeProfileRanked = leagueProfilesMap[String(homeTeamId)] || { offenseRank: null, defenseRank: null, label: "Ataque medio | Defensa media" };
 
     const awayStats = {
-      conference: awayEntry?.conference || "Pendiente",
-      position: awayEntry?.conferencePosition || "-",
-      context: awayContext,
-      record: awayEntry?.record || "Pendiente",
-      recentFormHtml: renderFormChips(awayRecent5.games),
-      pointsScoredRecent: formatOneDecimal(awayRecent5.scoredAvg),
+      conference:          awayEntry?.conference || "Pendiente",
+      position:            awayEntry?.conferencePosition || "-",
+      context:             awayContext,
+      record:              awayEntry?.record || "Pendiente",
+      recentFormHtml:      renderFormChips(awayRecent5.games),
+      pointsScoredRecent:  formatOneDecimal(awayRecent5.scoredAvg),
       pointsAllowedRecent: formatOneDecimal(awayRecent5.allowedAvg),
-      adjustedDiffRecent: formatSignedOneDecimal(awayRecent5.adjustedDiffAvg),
-      rivalQuality: getOpponentStrengthLabel(awayRecent5.opponentPctAvg),
-      venueSplit: `Fuera: ${awayVenueSplit.record}, margen ${formatSignedOneDecimal(awayVenueSplit.diffAvg)}`,
-      teamStyle: awayProfileRanked.label,
-      b2b: `${awayB2B.label} · ${awayB2B.detail}`
+      adjustedDiffRecent:  formatSignedOneDecimal(awayRecent5.adjustedDiffAvg),
+      rivalQuality:        getOpponentStrengthLabel(awayRecent5.opponentPctAvg),
+      venueSplit:          `Fuera: ${awayVenueSplit.record}, margen ${formatSignedOneDecimal(awayVenueSplit.diffAvg)}`,
+      teamStyle:           awayProfileRanked.label,
+      b2b:                 `${awayB2B.label} · ${awayB2B.detail}`
     };
 
     const homeStats = {
-      conference: homeEntry?.conference || "Pendiente",
-      position: homeEntry?.conferencePosition || "-",
-      context: homeContext,
-      record: homeEntry?.record || "Pendiente",
-      recentFormHtml: renderFormChips(homeRecent5.games),
-      pointsScoredRecent: formatOneDecimal(homeRecent5.scoredAvg),
+      conference:          homeEntry?.conference || "Pendiente",
+      position:            homeEntry?.conferencePosition || "-",
+      context:             homeContext,
+      record:              homeEntry?.record || "Pendiente",
+      recentFormHtml:      renderFormChips(homeRecent5.games),
+      pointsScoredRecent:  formatOneDecimal(homeRecent5.scoredAvg),
       pointsAllowedRecent: formatOneDecimal(homeRecent5.allowedAvg),
-      adjustedDiffRecent: formatSignedOneDecimal(homeRecent5.adjustedDiffAvg),
-      rivalQuality: getOpponentStrengthLabel(homeRecent5.opponentPctAvg),
-      venueSplit: `Casa: ${homeVenueSplit.record}, margen ${formatSignedOneDecimal(homeVenueSplit.diffAvg)}`,
-      teamStyle: homeProfileRanked.label,
-      b2b: `${homeB2B.label} · ${homeB2B.detail}`
+      adjustedDiffRecent:  formatSignedOneDecimal(homeRecent5.adjustedDiffAvg),
+      rivalQuality:        getOpponentStrengthLabel(homeRecent5.opponentPctAvg),
+      venueSplit:          `Casa: ${homeVenueSplit.record}, margen ${formatSignedOneDecimal(homeVenueSplit.diffAvg)}`,
+      teamStyle:           homeProfileRanked.label,
+      b2b:                 `${homeB2B.label} · ${homeB2B.detail}`
     };
 
-    const awayRecordParsed = parseRecord(awayStats.record);
-    const homeRecordParsed = parseRecord(homeStats.record);
-
+    const awayRecordParsed    = parseRecord(awayStats.record);
+    const homeRecordParsed    = parseRecord(homeStats.record);
     const awayRecentScoredNum = toNumber(awayStats.pointsScoredRecent);
     const homeRecentScoredNum = toNumber(homeStats.pointsScoredRecent);
-
     const awayRecentAllowedNum = toNumber(awayStats.pointsAllowedRecent);
     const homeRecentAllowedNum = toNumber(homeStats.pointsAllowedRecent);
-
     const awayAdjustedDiffNum = toNumber(awayStats.adjustedDiffRecent);
     const homeAdjustedDiffNum = toNumber(homeStats.adjustedDiffRecent);
-
-    const awayVenueDiffNum = awayVenueSplit.diffAvg;
-    const homeVenueDiffNum = homeVenueSplit.diffAvg;
+    const awayVenueDiffNum    = awayVenueSplit.diffAvg;
+    const homeVenueDiffNum    = homeVenueSplit.diffAvg;
 
     let awayEdge = 0;
     let homeEdge = 0;
@@ -1527,7 +1302,6 @@ async function analyzeGame(gameId) {
       if (awayRecordParsed.pct > homeRecordParsed.pct) awayEdge += 2;
       if (homeRecordParsed.pct > awayRecordParsed.pct) homeEdge += 2;
     }
-
     if (awayEntry?.conferencePosition && homeEntry?.conferencePosition) {
       const awayPos = Number(awayEntry.conferencePosition);
       const homePos = Number(homeEntry.conferencePosition);
@@ -1536,33 +1310,27 @@ async function analyzeGame(gameId) {
         if (homePos < awayPos) homeEdge += 1;
       }
     }
-
     if (awayAdjustedDiffNum !== null && homeAdjustedDiffNum !== null) {
       if (awayAdjustedDiffNum > homeAdjustedDiffNum) awayEdge += 2;
       if (homeAdjustedDiffNum > awayAdjustedDiffNum) homeEdge += 2;
     }
-
     if (awayRecentAllowedNum !== null && homeRecentAllowedNum !== null) {
       if (awayRecentAllowedNum < homeRecentAllowedNum) awayEdge += 1;
       if (homeRecentAllowedNum < awayRecentAllowedNum) homeEdge += 1;
     }
-
     if (awayRecentScoredNum !== null && homeRecentScoredNum !== null) {
       if (awayRecentScoredNum > homeRecentScoredNum) awayEdge += 1;
       if (homeRecentScoredNum > awayRecentScoredNum) homeEdge += 1;
     }
-
     if (awayVenueDiffNum !== null && homeVenueDiffNum !== null) {
       if (awayVenueDiffNum > homeVenueDiffNum) awayEdge += 1;
       if (homeVenueDiffNum > awayVenueDiffNum) homeEdge += 1;
     }
-
     if (awayB2B.isB2B && !homeB2B.isB2B) homeEdge += 1;
     if (homeB2B.isB2B && !awayB2B.isB2B) awayEdge += 1;
 
     let edgeText = "Matchup equilibrado";
     let leanText = "No bet";
-
     if (awayEdge >= homeEdge + 2) {
       edgeText = `Ventaja ${awayName}`;
       leanText = `Lean visitante: ${awayName}`;
@@ -1571,8 +1339,8 @@ async function analyzeGame(gameId) {
       leanText = `Lean local: ${homeName}`;
     }
 
-    const awayWeakScheduleRecent = awayRecent5.opponentPctAvg !== null && awayRecent5.opponentPctAvg < 0.45;
-    const homeWeakScheduleRecent = homeRecent5.opponentPctAvg !== null && homeRecent5.opponentPctAvg < 0.45;
+    const awayWeakScheduleRecent   = awayRecent5.opponentPctAvg !== null && awayRecent5.opponentPctAvg < 0.45;
+    const homeWeakScheduleRecent   = homeRecent5.opponentPctAvg !== null && homeRecent5.opponentPctAvg < 0.45;
     const awayStrongScheduleRecent = awayRecent5.opponentPctAvg !== null && awayRecent5.opponentPctAvg >= 0.60;
     const homeStrongScheduleRecent = homeRecent5.opponentPctAvg !== null && homeRecent5.opponentPctAvg >= 0.60;
 
@@ -1591,112 +1359,67 @@ async function analyzeGame(gameId) {
       }
     }
 
-    const recordCompare = compareNumbersHigherBetter(awayRecordParsed?.pct ?? null, homeRecordParsed?.pct ?? null);
+    const recordCompare       = compareNumbersHigherBetter(awayRecordParsed?.pct ?? null, homeRecordParsed?.pct ?? null);
     const recentScoredCompare = compareNumbersHigherBetter(awayRecentScoredNum, homeRecentScoredNum);
     const recentAllowedCompare = compareNumbersLowerBetter(awayRecentAllowedNum, homeRecentAllowedNum);
     const adjustedDiffCompare = compareNumbersHigherBetter(awayAdjustedDiffNum, homeAdjustedDiffNum);
-    const venueCompare = compareNumbersHigherBetter(awayVenueDiffNum, homeVenueDiffNum);
+    const venueCompare        = compareNumbersHigherBetter(awayVenueDiffNum, homeVenueDiffNum);
 
-    const projectedAwayScore =
-      awayRecentScoredNum !== null && homeRecentAllowedNum !== null
-        ? (awayRecentScoredNum + homeRecentAllowedNum) / 2
-        : awayRecentScoredNum;
+    const projectedAwayScore = awayRecentScoredNum !== null && homeRecentAllowedNum !== null
+      ? (awayRecentScoredNum + homeRecentAllowedNum) / 2
+      : awayRecentScoredNum;
+    const projectedHomeScore = homeRecentScoredNum !== null && awayRecentAllowedNum !== null
+      ? (homeRecentScoredNum + awayRecentAllowedNum) / 2
+      : homeRecentScoredNum;
+    const projectedTotal = projectedAwayScore !== null && projectedHomeScore !== null
+      ? projectedAwayScore + projectedHomeScore
+      : null;
 
-    const projectedHomeScore =
-      homeRecentScoredNum !== null && awayRecentAllowedNum !== null
-        ? (homeRecentScoredNum + awayRecentAllowedNum) / 2
-        : homeRecentScoredNum;
-
-    const projectedTotal =
-      projectedAwayScore !== null && projectedHomeScore !== null
-        ? projectedAwayScore + projectedHomeScore
-        : null;
-
-    const oddsEvents =
-      oddsRes.status === "fulfilled" && Array.isArray(oddsRes.value)
-        ? oddsRes.value
-        : [];
-
+    const oddsEvents = oddsRes.status === "fulfilled" && Array.isArray(oddsRes.value) ? oddsRes.value : [];
     const matchingOddsEvent = findMatchingOddsEvent(oddsEvents, homeName, awayName, comp?.date);
-
     const betRecommendation = buildOddsRecommendation({
       oddsEvent: matchingOddsEvent,
-      awayName,
-      homeName,
-      awayEdge,
-      homeEdge,
-      projectedTotal
+      awayName, homeName, awayEdge, homeEdge, projectedTotal
     });
 
     analysisPanel.innerHTML = `
-      <div class="analysis-box">
-        <div class="analysis-header">
-          <h3>${escapeHtml(awayName)} vs ${escapeHtml(homeName)}</h3>
-          <p class="analysis-subtitle">Análisis pregame NBA</p>
-          <p class="analysis-date">${escapeHtml(gameDate)}</p>
-        </div>
-
-        ${renderBetRecommendationBlock(betRecommendation, edgeText, autoNote, leanText)}
-
-        <div class="pregame-shell">
-          <div class="pregame-compare">
-            <div class="pregame-row pregame-head">
-              <div>${escapeHtml(awayName)}</div>
-              <div>Métrica</div>
-              <div>${escapeHtml(homeName)}</div>
-            </div>
-
-            ${buildStatRow(escapeHtml(awayStats.conference), "Conferencia", escapeHtml(homeStats.conference))}
-            ${buildStatRow(
-              escapeHtml(`${awayStats.record} · ${awayStats.position}º`),
-              "Récord / Posición",
-              escapeHtml(`${homeStats.record} · ${homeStats.position}º`),
-              recordCompare.away,
-              recordCompare.home
-            )}
-            ${buildStatRow(escapeHtml(awayStats.context), "Contexto", escapeHtml(homeStats.context))}
-            ${buildStatRow(awayStats.recentFormHtml, "Últimos 5", homeStats.recentFormHtml)}
-            ${buildStatRow(escapeHtml(awayStats.rivalQuality), "Calidad rival", escapeHtml(homeStats.rivalQuality))}
-            ${buildStatRow(
-              escapeHtml(awayStats.venueSplit),
-              "Forma fuera/casa",
-              escapeHtml(homeStats.venueSplit),
-              venueCompare.away,
-              venueCompare.home
-            )}
-            ${buildStatRow(escapeHtml(awayStats.teamStyle), "Perfil actual", escapeHtml(homeStats.teamStyle))}
-            ${buildStatRow(
-              escapeHtml(awayStats.pointsScoredRecent),
-              "Puntos anotados",
-              escapeHtml(homeStats.pointsScoredRecent),
-              recentScoredCompare.away,
-              recentScoredCompare.home
-            )}
-            ${buildStatRow(
-              escapeHtml(awayStats.pointsAllowedRecent),
-              "Puntos recibidos",
-              escapeHtml(homeStats.pointsAllowedRecent),
-              recentAllowedCompare.away,
-              recentAllowedCompare.home
-            )}
-            ${buildStatRow(
-              escapeHtml(awayStats.adjustedDiffRecent),
-              "Margen ajustado",
-              escapeHtml(homeStats.adjustedDiffRecent),
-              adjustedDiffCompare.away,
-              adjustedDiffCompare.home
-            )}
-            ${buildStatRow(escapeHtml(awayStats.b2b), "B2B", escapeHtml(homeStats.b2b))}
-          </div>
-        </div>
+      <div class="analysis-header">
+        <h3>Análisis pregame NBA</h3>
+        <p class="game-datetime">${escapeHtml(gameDate)}</p>
       </div>
+
+      <div class="pregame-matchup">
+        <div class="pregame-header">
+          <div class="away-header">${escapeHtml(awayName)}</div>
+          <div class="vs-label">VS</div>
+          <div class="home-header">${escapeHtml(homeName)}</div>
+        </div>
+
+        ${buildStatRow(awayStats.recentFormHtml, "Forma reciente", homeStats.recentFormHtml)}
+        ${buildStatRow(escapeHtml(awayStats.record), "Record temporada", escapeHtml(homeStats.record), recordCompare.away, recordCompare.home)}
+        ${buildStatRow(escapeHtml(`${awayStats.conference} #${awayStats.position}`), "Conferencia / Pos.", escapeHtml(`${homeStats.conference} #${homeStats.position}`))}
+        ${buildStatRow(escapeHtml(awayStats.context), "Contexto clasificatorio", escapeHtml(homeStats.context))}
+        ${buildStatRow(escapeHtml(awayStats.pointsScoredRecent), "Pts anotados (últ. 5)", escapeHtml(homeStats.pointsScoredRecent), recentScoredCompare.away, recentScoredCompare.home)}
+        ${buildStatRow(escapeHtml(awayStats.pointsAllowedRecent), "Pts recibidos (últ. 5)", escapeHtml(homeStats.pointsAllowedRecent), recentAllowedCompare.away, recentAllowedCompare.home)}
+        ${buildStatRow(escapeHtml(awayStats.adjustedDiffRecent), "Diferencial ajustado", escapeHtml(homeStats.adjustedDiffRecent), adjustedDiffCompare.away, adjustedDiffCompare.home)}
+        ${buildStatRow(escapeHtml(awayStats.rivalQuality), "Calidad de rivales", escapeHtml(homeStats.rivalQuality))}
+        ${buildStatRow(escapeHtml(awayStats.venueSplit), "Split de cancha", escapeHtml(homeStats.venueSplit), venueCompare.away, venueCompare.home)}
+        ${buildStatRow(escapeHtml(awayStats.teamStyle), "Perfil ofensivo/defensivo", escapeHtml(homeStats.teamStyle))}
+        ${buildStatRow(escapeHtml(awayStats.b2b), "Back-to-back", escapeHtml(homeStats.b2b))}
+      </div>
+
+      ${projectedTotal !== null ? `<p class="projected-total">Total proyectado: <strong>${projectedTotal.toFixed(1)} pts</strong></p>` : ""}
+
+      ${renderBetRecommendationBlock(betRecommendation, edgeText, autoNote, leanText)}
     `;
+
   } catch (error) {
-    console.error("Pregame error:", error);
+    console.error("ERROR análisis:", error);
     analysisPanel.innerHTML = "<p>No se pudo cargar el análisis pregame.</p>";
   }
 }
 
+// ─── EVENT LISTENERS ──────────────────────────────────────────────────────────
 if (gamesContainer) {
   gamesContainer.addEventListener("click", event => {
     const button = event.target.closest(".analyze-btn");
@@ -1708,7 +1431,7 @@ if (gamesContainer) {
 }
 
 if (modalCloseBtn) modalCloseBtn.addEventListener("click", closeModal);
-if (modalCloseBg) modalCloseBg.addEventListener("click", closeModal);
+if (modalCloseBg)  modalCloseBg.addEventListener("click",  closeModal);
 
 document.addEventListener("keydown", event => {
   if (event.key === "Escape") closeModal();
