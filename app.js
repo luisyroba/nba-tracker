@@ -1,8 +1,8 @@
 diff --git a/app.js b/app.js
-index af4bb19417a4bbb53ebd32d8307af3d38dc5dbc9..b3bce27b52e0e24c3d9d6614acaa729c9e090f75 100644
+index af4bb19417a4bbb53ebd32d8307af3d38dc5dbc9..8700cc4df70fbe15ab0a011f21c0b03d789e7c85 100644
 --- a/app.js
 +++ b/app.js
-@@ -1,50 +1,52 @@
+@@ -1,120 +1,133 @@
  /* NBA Pregame Scout · app.js
     Base: app-3.js (métricas y lógica de pick originales)
     Cambios aplicados:
@@ -55,7 +55,14 @@ index af4bb19417a4bbb53ebd32d8307af3d38dc5dbc9..b3bce27b52e0e24c3d9d6614acaa729c
  function getContextFromConferencePosition(pos,clincher){ if(clincher==='e') return 'Eliminado'; if(clincher==='x') return 'Clasificado'; if(clincher==='y') return 'Líder división'; if(clincher==='z') return 'Mejor récord'; if(!pos) return '—'; const p=Number(pos); if(p<=6) return 'Playoffs directo'; if(p<=10) return 'Play-In'; return 'Fuera de playoffs'; }
  function getOpponentStrengthLabel(pct){ if(pct===null||pct===undefined) return '—'; if(pct>=0.60) return 'Rivales fuertes'; if(pct>=0.50) return 'Rivales medios'; if(pct>=0.40) return 'Rivales mixtos'; return 'Rivales débiles'; }
  function getStatValue(entry,names){ if(!entry?.stats) return 'Pendiente'; const ns=Array.isArray(names)?names:[names]; for(const n of ns){ const s=entry.stats.find(s=>String(s?.name||'').toLowerCase()===n.toLowerCase()); if(s?.displayValue!==undefined&&s.displayValue!=='') return s.displayValue; if(s?.value!==undefined&&s.value!=='') return String(s.value); } return 'Pendiente'; }
-@@ -53,68 +55,73 @@ function getStatValue(entry,names){ if(!entry?.stats) return 'Pendiente'; const
++function toYYYYMMDD(dateObj){
++  const y=dateObj.getUTCFullYear();
++  const m=String(dateObj.getUTCMonth()+1).padStart(2,'0');
++  const d=String(dateObj.getUTCDate()).padStart(2,'0');
++  return `${y}${m}${d}`;
++}
+ 
+ /* ── Standings ── */
  function createEmptyStandingsLookup(){ return {byTeamId:{},byAbbr:{},byName:{}}; }
  function buildStandingsLookup(data){
    const lk=createEmptyStandingsLookup();
@@ -133,7 +140,7 @@ index af4bb19417a4bbb53ebd32d8307af3d38dc5dbc9..b3bce27b52e0e24c3d9d6614acaa729c
      const home=comp?.competitors?.find(c=>c.homeAway==='home');
      const away=comp?.competitors?.find(c=>c.homeAway==='away');
      const isHome=String(home?.team?.id||home?.id||'')===tid;
-@@ -149,369 +156,396 @@ function getVenueSplitForm(schedule,teamId,gameDate,venue,n){
+@@ -149,372 +162,412 @@ function getVenueSplitForm(schedule,teamId,gameDate,venue,n){
    }
    return {record:`${w}-${l}`,diffAvg:average(diffs)};
  }
@@ -559,11 +566,26 @@ index af4bb19417a4bbb53ebd32d8307af3d38dc5dbc9..b3bce27b52e0e24c3d9d6614acaa729c
  async function loadNBAGames(){
    statusEl.textContent='Cargando partidos NBA...';
    try{
-     const data=await fetchJSON('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
+-    const data=await fetchJSON('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
++    const datesToTry=[];
++    const now=new Date();
++    for(let i=0;i<5;i++){
++      const dt=new Date(now);
++      dt.setUTCDate(now.getUTCDate()+i);
++      datesToTry.push(toYYYYMMDD(dt));
++    }
++    let data=null;
++    for(const d of datesToTry){
++      const tryData=await fetchJSON(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${d}`);
++      if((tryData?.events||[]).length){ data=tryData; break; }
++      if(!data) data=tryData;
++    }
++    if(!data) data=await fetchJSON('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
 +    CURRENT_SEASON=Number(data?.season?.year)||CURRENT_SEASON;
      const events=data?.events||[];
      scoreboardCache=events;
-     if(!events.length){ statusEl.textContent='Sin partidos disponibles.'; gamesContainer.innerHTML='<div class="empty-state"><p>No hay juegos disponibles hoy.</p></div>'; return; }
+-    if(!events.length){ statusEl.textContent='Sin partidos disponibles.'; gamesContainer.innerHTML='<div class="empty-state"><p>No hay juegos disponibles hoy.</p></div>'; return; }
++    if(!events.length){ statusEl.textContent='Sin partidos disponibles.'; gamesContainer.innerHTML='<div class="empty-state"><p>No hay juegos disponibles en los próximos días.</p></div>'; return; }
      statusEl.textContent=`Se cargaron ${events.length} partidos NBA`;
      gamesContainer.innerHTML='';
      for(const event of events){
@@ -586,7 +608,10 @@ index af4bb19417a4bbb53ebd32d8307af3d38dc5dbc9..b3bce27b52e0e24c3d9d6614acaa729c
        card.innerHTML=`
          <div class="game-top"><span class="game-status">${isLive?'🔴 EN VIVO':'📅 NBA'}</span><span class="game-date">${new Date(event.date).toLocaleDateString('es-CL',{weekday:'short',month:'short',day:'numeric'})}</span></div>
          <div class="teams">
-@@ -584,108 +618,129 @@ async function analyzeGame(gameId){
+           <div class="team-row"><div class="team-row-left"><img class="team-logo" src="${espnLogo(awayAbbr)}" alt="${escapeHtml(awayAbbr)}" loading="lazy" width="30" height="30"><span class="team-name">${escapeHtml(awayName)}</span></div>${(isFinal||isLive)?`<span class="team-score">${escapeHtml(String(awayScore))}</span>`:''}</div>
+           <div class="team-row"><div class="team-row-left"><img class="team-logo" src="${espnLogo(homeAbbr)}" alt="${escapeHtml(homeAbbr)}" loading="lazy" width="30" height="30"><span class="team-name">${escapeHtml(homeName)}</span></div>${(isFinal||isLive)?`<span class="team-score">${escapeHtml(String(homeScore))}</span>`:''}</div>
+         </div>
+@@ -584,108 +637,129 @@ async function analyzeGame(gameId){
      const homeVenueSplit=getVenueSplitForm(homeSchedule,homeTeamId,comp?.date,'home',5);
      const awayB2B=getB2BStatus(awaySchedule,awayTeamId,comp?.date);
      const homeB2B=getB2BStatus(homeSchedule,homeTeamId,comp?.date);
