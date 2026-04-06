@@ -7,6 +7,7 @@ const modalCloseBtn = document.getElementById("modal-close");
 const modalCloseBg = document.getElementById("modal-close-bg");
 
 let leagueProfilesCache = null;
+let scoreboardCache = [];
 
 function openModal() {
   if (!modal) return;
@@ -204,6 +205,7 @@ function getTeamGameInfo(event, teamId) {
 }
 
 function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standingsLookup) {
+  const safeLookup = standingsLookup || { byTeamId: {}, byAbbr: {} };
   const events = normalizeGamesFromSchedule(data);
   const targetTime = gameDate ? new Date(gameDate).getTime() : Date.now();
 
@@ -217,8 +219,8 @@ function getRecentFormFromSchedule(data, teamId, gameDate, sampleSize, standings
     .slice(0, sampleSize)
     .map(game => {
       const opponentEntry =
-        standingsLookup.byTeamId[String(game.opponentId)] ||
-        standingsLookup.byAbbr[game.opponentAbbr] ||
+        safeLookup.byTeamId?.[String(game.opponentId)] ||
+        safeLookup.byAbbr?.[game.opponentAbbr] ||
         null;
 
       const opponentRecord = parseRecord(opponentEntry?.record || "");
@@ -332,7 +334,7 @@ async function fetchTeamSchedule(teamId) {
       const response = await fetch(url);
       if (!response.ok) continue;
       const data = await response.json();
-      if (Array.isArray(data?.events) && data.events.length) return data;
+      if (Array.isArray(data?.events)) return data;
     } catch (error) {
       console.warn("Schedule fetch failed:", url, error);
     }
@@ -385,7 +387,7 @@ async function fetchConferenceStandingsSorted() {
     }
   }
 
-  throw new Error("No se pudo cargar standings ordenados");
+  return null;
 }
 
 function buildStandingsLookup(standingsData) {
@@ -547,14 +549,10 @@ function getRankFromValue(value, values, higherBetter = true) {
 
   if (!cleaned.length) return null;
 
-  const uniqueSorted = [...new Set(cleaned)].sort((a, b) => {
-    return higherBetter ? b - a : a - b;
-  });
+  const uniqueSorted = [...new Set(cleaned)].sort((a, b) => (higherBetter ? b - a : a - b));
+  const index = uniqueSorted.findIndex(v => v === Number(value));
 
-  const index = uniqueSorted.findIndex(v => v === value);
-  if (index === -1) return null;
-
-  return index + 1;
+  return index >= 0 ? index + 1 : null;
 }
 
 function rankTierLabel(rank, totalTeams = 30) {
@@ -604,11 +602,12 @@ function buildLeagueProfilesMap(teamProfiles) {
 
 async function getLeagueProfilesMap(standingsData) {
   if (leagueProfilesCache) return leagueProfilesCache;
+  if (!standingsData?.children?.length) return {};
 
-  const leagueTeamIds = standingsData?.children
-    ?.flatMap(group => group?.standings?.entries || [])
-    ?.map(entry => String(entry?.team?.id || ""))
-    ?.filter(Boolean) || [];
+  const leagueTeamIds = standingsData.children
+    .flatMap(group => group?.standings?.entries || [])
+    .map(entry => String(entry?.team?.id || ""))
+    .filter(Boolean);
 
   const leagueProfilesRaw = await Promise.all(
     leagueTeamIds.map(async (teamId) => {
@@ -622,6 +621,48 @@ async function getLeagueProfilesMap(standingsData) {
 
   leagueProfilesCache = buildLeagueProfilesMap(leagueProfilesRaw);
   return leagueProfilesCache;
+}
+
+function getCompetitorsFromEventLike(eventLike) {
+  return eventLike?.competitions?.[0]?.competitors || eventLike?.header?.competitions?.[0]?.competitors || [];
+}
+
+function findGameInScoreboardCache(gameId) {
+  return scoreboardCache.find(event => String(event?.id || "") === String(gameId)) || null;
+}
+
+async function fetchGameSummary(gameId) {
+  const urls = [
+    `https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`,
+    `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`
+  ];
+
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const competitors = data?.header?.competitions?.[0]?.competitors || [];
+      if (competitors.length >= 2) return data;
+    } catch (error) {
+      console.warn("Summary fetch failed:", url, error);
+    }
+  }
+
+  return null;
+}
+
+function buildFallbackSummaryFromScoreboardEvent(event) {
+  if (!event) return null;
+  return {
+    header: {
+      competitions: event?.competitions || []
+    }
+  };
+}
+
+function createEmptyStandingsLookup() {
+  return { entries: [], byTeamId: {}, byAbbr: {}, byName: {} };
 }
 
 async function loadNBAGames() {
@@ -639,6 +680,7 @@ async function loadNBAGames() {
 
     const data = await response.json();
     const events = data.events || [];
+    scoreboardCache = events;
 
     if (!events.length) {
       statusEl.textContent = "No se encontraron partidos NBA";
@@ -738,22 +780,28 @@ async function analyzeGame(gameId) {
   analysisPanel.innerHTML = "<p>Cargando análisis pregame...</p>";
 
   try {
-    const [summaryRes, standingsData] = await Promise.all([
-      fetch(`https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${gameId}`),
-      fetchConferenceStandingsSorted()
-    ]);
+    const summaryResult = await fetchGameSummary(gameId);
+    const scoreboardEvent = findGameInScoreboardCache(gameId);
+    const summaryData = summaryResult || buildFallbackSummaryFromScoreboardEvent(scoreboardEvent);
 
-    if (!summaryRes.ok) throw new Error(`Summary HTTP ${summaryRes.status}`);
+    const competitors = getCompetitorsFromEventLike(summaryData);
+    if (!competitors.length) {
+      analysisPanel.innerHTML = "<p>No se pudo abrir el pregame de este partido.</p>";
+      return;
+    }
 
-    const summaryData = await summaryRes.json();
-    const standingsLookup = buildStandingsLookup(standingsData);
-    const leagueProfilesMap = await getLeagueProfilesMap(standingsData);
-
-    const comp = summaryData?.header?.competitions?.[0] || {};
-    const competitors = comp?.competitors || [];
+    const comp =
+      summaryData?.header?.competitions?.[0] ||
+      scoreboardEvent?.competitions?.[0] ||
+      {};
 
     const home = competitors.find(team => team.homeAway === "home");
     const away = competitors.find(team => team.homeAway === "away");
+
+    if (!home || !away) {
+      analysisPanel.innerHTML = "<p>No se pudo identificar local y visitante en este partido.</p>";
+      return;
+    }
 
     const homeName = home?.team?.displayName || "Local";
     const awayName = away?.team?.displayName || "Visitante";
@@ -766,6 +814,37 @@ async function analyzeGame(gameId) {
       ? new Date(comp.date).toLocaleString("es-CL")
       : "Pendiente";
 
+    const [
+      standingsRes,
+      awayScheduleRes,
+      homeScheduleRes
+    ] = await Promise.allSettled([
+      fetchConferenceStandingsSorted(),
+      fetchTeamSchedule(awayTeamId),
+      fetchTeamSchedule(homeTeamId)
+    ]);
+
+    const standingsData =
+      standingsRes.status === "fulfilled" ? standingsRes.value : null;
+
+    const standingsLookup = standingsData
+      ? buildStandingsLookup(standingsData)
+      : createEmptyStandingsLookup();
+
+    let leagueProfilesMap = {};
+    try {
+      leagueProfilesMap = standingsData ? await getLeagueProfilesMap(standingsData) : {};
+    } catch (error) {
+      console.warn("League profiles failed:", error);
+      leagueProfilesMap = {};
+    }
+
+    const awaySchedule =
+      awayScheduleRes.status === "fulfilled" ? awayScheduleRes.value : null;
+
+    const homeSchedule =
+      homeScheduleRes.status === "fulfilled" ? homeScheduleRes.value : null;
+
     const awayEntry =
       standingsLookup.byTeamId[String(awayTeamId)] ||
       standingsLookup.byAbbr[awayAbbr] ||
@@ -777,11 +856,6 @@ async function analyzeGame(gameId) {
       standingsLookup.byAbbr[homeAbbr] ||
       standingsLookup.byName[homeName] ||
       null;
-
-    const [awaySchedule, homeSchedule] = await Promise.all([
-      fetchTeamSchedule(awayTeamId),
-      fetchTeamSchedule(homeTeamId)
-    ]);
 
     const awayRecent5 = getRecentFormFromSchedule(awaySchedule, awayTeamId, comp?.date, 5, standingsLookup);
     const homeRecent5 = getRecentFormFromSchedule(homeSchedule, homeTeamId, comp?.date, 5, standingsLookup);
@@ -1062,7 +1136,17 @@ async function analyzeGame(gameId) {
     `;
   } catch (error) {
     console.error("ERROR ANALYSIS:", error);
-    analysisPanel.innerHTML = "<p>No se pudo cargar el análisis pregame del partido.</p>";
+    analysisPanel.innerHTML = `
+      <div class="analysis-box">
+        <div class="analysis-header">
+          <h3>Análisis pregame</h3>
+          <p class="analysis-subtitle">No se pudo completar el análisis de este partido.</p>
+        </div>
+        <div class="betting-notes">
+          <p>Revisa la consola del navegador para identificar el error exacto.</p>
+        </div>
+      </div>
+    `;
   }
 }
 
