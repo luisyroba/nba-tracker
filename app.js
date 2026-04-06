@@ -142,7 +142,7 @@ function getOpponentStrengthLabel(pct) {
   if (pct === null || pct === undefined || Number.isNaN(pct)) return "Pendiente";
   if (pct >= 0.60) return "Rivales fuertes";
   if (pct >= 0.45) return "Rivales medios";
-  return "Rivales débiles";
+  return "Rivales dÃ©biles";
 }
 
 function getOpponentWeight(pct) {
@@ -164,7 +164,7 @@ function renderFormChips(games) {
       ${ordered.map(game => `
         <span
           class="form-chip ${game.won ? "win" : "loss"}"
-          title="${escapeHtml(`${game.won ? "Ganó" : "Perdió"} vs ${game.opponentName} (${game.teamScore}-${game.opponentScore})`)}"
+          title="${escapeHtml(`${game.won ? "GanÃ³" : "PerdiÃ³"} vs ${game.opponentName} (${game.teamScore}-${game.opponentScore})`)}"
         >
           ${game.won ? "G" : "P"}
         </span>
@@ -319,9 +319,9 @@ function getB2BStatus(data, teamId, gameDate) {
   }
 
   if (diffHours <= 30) {
-    if (previousGame.homeAway === "home") return { isB2B: true, label: "Sí", detail: "B2B en casa" };
-    if (previousGame.homeAway === "away") return { isB2B: true, label: "Sí", detail: "B2B con viaje" };
-    return { isB2B: true, label: "Sí", detail: "B2B" };
+    if (previousGame.homeAway === "home") return { isB2B: true, label: "SÃ­", detail: "B2B en casa" };
+    if (previousGame.homeAway === "away") return { isB2B: true, label: "SÃ­", detail: "B2B con viaje" };
+    return { isB2B: true, label: "SÃ­", detail: "B2B" };
   }
 
   return { isB2B: false, label: "No", detail: "Descanso normal" };
@@ -487,7 +487,7 @@ function normalizeStatLabel(value) {
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[Ì€-Í¯]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
@@ -759,7 +759,7 @@ function normalizeString(value) {
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[Ì€-Í¯]/g, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
@@ -968,7 +968,7 @@ function summarizeAvailability(availability) {
   }
 
   return {
-    display: parts.join(" · "),
+    display: parts.join(" Â· "),
     scorePenalty: Number(scorePenalty.toFixed(2)),
     lineupLabel,
     injuryCount: availability.injuries?.length || 0
@@ -1213,7 +1213,7 @@ function renderTeamAvailabilityCard(teamName, availability) {
         ${
           starters.length
             ? starters.map(item => `
-                <p style="margin:0 0 4px 0; color:#334155;">${escapeHtml(item.position)} · ${escapeHtml(item.player)}</p>
+                <p style="margin:0 0 4px 0; color:#334155;">${escapeHtml(item.position)} Â· ${escapeHtml(item.player)}</p>
               `).join("")
             : `<p style="margin:0; color:#64748b;">No detectado.</p>`
         }
@@ -1251,7 +1251,7 @@ function renderBetRecommendationBlock(
     <div class="bet-recommendation-card ${toneClass}">
       <div class="bet-recommendation-top">
         <p class="bet-kicker">${escapeHtml(edgeText)}</p>
-        <h4>${isNoBet ? "Lectura del partido" : "Recomendación de apuesta"}</h4>
+        <h4>${isNoBet ? "Lectura del partido" : "RecomendaciÃ³n de apuesta"}</h4>
         <p class="bet-note">${escapeHtml(autoNote)}</p>
         <p class="bet-lean"><strong>${escapeHtml(leanText)}</strong></p>
         ${availabilityNote ? `<p class="bet-availability">${escapeHtml(availabilityNote)}</p>` : ""}
@@ -1265,8 +1265,8 @@ function renderBetRecommendationBlock(
               <p><strong>Mercado:</strong> ${escapeHtml(recommendation.selection.marketLabel || recommendation.selection.type?.toUpperCase?.() || "Pendiente")}</p>
               <p><strong>Casa:</strong> ${escapeHtml(getBookmakerDisplayName(recommendation.selection.bookmakerKey, recommendation.selection.bookmakerTitle))}</p>
               <p><strong>Cuota:</strong> ${escapeHtml(formatOddsDecimal(recommendation.selection.odds))}</p>
-              <p><strong>Prob. implícita:</strong> ${escapeHtml(formatPercent(recommendation.selection.impliedProbability))}</p>
-              ${recommendation.selection.isEstimated ? `<p>Línea estimada basada en mercado principal (${escapeHtml(recommendation.selection.derivedFromLabel || "referencia")}).</p>` : ""}
+              <p><strong>Prob. implÃ­cita:</strong> ${escapeHtml(formatPercent(recommendation.selection.impliedProbability))}</p>
+              ${recommendation.selection.isEstimated ? `<p>LÃ­nea estimada basada en mercado principal (${escapeHtml(recommendation.selection.derivedFromLabel || "referencia")}).</p>` : ""}
               <p><strong>Fuerza:</strong> ${escapeHtml(recommendation.strength.level)} | <strong>Stake:</strong> ${escapeHtml(recommendation.strength.stake)}</p>
               <p>${escapeHtml(recommendation.reason || "")}</p>
             </div>
@@ -1274,7 +1274,7 @@ function renderBetRecommendationBlock(
           : `
             <div class="bet-pick no-bet-copy">
               <p><strong>Pick recomendado:</strong> No bet</p>
-              <p>${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadística.")}</p>
+              <p>${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadÃ­stica.")}</p>
             </div>
           `
       }
@@ -1400,7 +1400,7 @@ function selectTotalRecommendation(bookmakers, projectedTotal) {
           bookmakerTitle: bookmaker.title,
           side: "Over",
           line: overPoint,
-          label: `Más de ${overPoint}`,
+          label: `MÃ¡s de ${overPoint}`,
           odds: overPrice,
           impliedProbability: impliedProbabilityFromDecimal(overPrice),
           isEstimated: false
@@ -1455,7 +1455,7 @@ function buildOddsRecommendation({
       return {
         selection,
         strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
-        reason: `${awayName} es el lado que mejor respalda la lectura estadística del matchup.`
+        reason: `${awayName} es el lado que mejor respalda la lectura estadÃ­stica del matchup.`
       };
     }
   }
@@ -1466,7 +1466,7 @@ function buildOddsRecommendation({
       return {
         selection,
         strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
-        reason: `${homeName} es el lado que mejor respalda la lectura estadística del matchup.`
+        reason: `${homeName} es el lado que mejor respalda la lectura estadÃ­stica del matchup.`
       };
     }
   }
@@ -1476,7 +1476,7 @@ function buildOddsRecommendation({
     return {
       selection: totalSelection,
       strength: classifyBetStrength(1.75, totalSelection.odds, contextPenalty),
-      reason: "Como el lado está equilibrado, el mejor ángulo del matchup aparece en el total."
+      reason: "Como el lado estÃ¡ equilibrado, el mejor Ã¡ngulo del matchup aparece en el total."
     };
   }
 
@@ -1489,11 +1489,11 @@ function buildOddsRecommendation({
     return {
       selection: fallbackMoneyline,
       strength: classifyBetStrength(1.25, fallbackMoneyline.odds, contextPenalty),
-      reason: "No hubo spread o total claro, pero sí una opción utilizable para seguir el lean principal."
+      reason: "No hubo spread o total claro, pero sÃ­ una opciÃ³n utilizable para seguir el lean principal."
     };
   }
 
-  return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadísticas y la disponibilidad.");
+  return makeNoBet("La lectura es intermedia y no deja un pick claro que coincida con las estadÃ­sticas y la disponibilidad.");
 }
 
 document.addEventListener("click", (event) => {
@@ -1571,8 +1571,8 @@ async function loadNBAGames() {
 
       let badgeText = "Programado";
       if (isFinal) badgeText = "Finalizado";
-      else if (isLive) badgeText = `En progreso · Q${period} - ${clock}`.trim();
-      else badgeText = `Programado · ${formatGameTime(event.date)}`;
+      else if (isLive) badgeText = `En progreso Â· Q${period} - ${clock}`.trim();
+      else badgeText = `Programado Â· ${formatGameTime(event.date)}`;
 
       const card = document.createElement("article");
       card.className = "game-card";
@@ -1642,7 +1642,7 @@ async function analyzeGame(gameId) {
   if (!analysisPanel) return;
 
   openModal();
-  analysisPanel.innerHTML = "<p>Cargando análisis pregame...</p>";
+  analysisPanel.innerHTML = "<p>Cargando anÃ¡lisis pregame...</p>";
 
   try {
     const summaryResult = await fetchGameSummary(gameId);
@@ -1756,7 +1756,7 @@ async function analyzeGame(gameId) {
       <div class="analysis-box">
         <div class="analysis-header">
           <h3>${escapeHtml(awayName)} vs ${escapeHtml(homeName)}</h3>
-          <p class="analysis-subtitle">Pregame NBA en español</p>
+          <p class="analysis-subtitle">Pregame NBA en espaÃ±ol</p>
           <p class="analysis-date">${escapeHtml(gameDate ? new Date(gameDate).toLocaleString("es-CL") : "Sin fecha")}</p>
         </div>
 
@@ -1775,15 +1775,15 @@ async function analyzeGame(gameId) {
         <div class="pregame-shell">
           <div class="pregame-row pregame-head">
             <div>${escapeHtml(awayName)}</div>
-            <div>Métrica</div>
+            <div>MÃ©trica</div>
             <div>${escapeHtml(homeName)}</div>
           </div>
 
           <div class="pregame-compare">
             ${buildStatRow(escapeHtml(awayStanding?.conference || "NBA"), "Conferencia", escapeHtml(homeStanding?.conference || "NBA"))}
-            ${buildStatRow(escapeHtml(`${awayRecord} · #${awayStanding?.conferencePosition || "-"}`), "Récord / Posición", escapeHtml(`${homeRecord} · #${homeStanding?.conferencePosition || "-"}`))}
+            ${buildStatRow(escapeHtml(`${awayRecord} Â· #${awayStanding?.conferencePosition || "-"}`), "RÃ©cord / PosiciÃ³n", escapeHtml(`${homeRecord} Â· #${homeStanding?.conferencePosition || "-"}`))}
             ${buildStatRow(escapeHtml(awayContext), "Contexto", escapeHtml(homeContext))}
-            ${buildStatRow(renderFormChips(awayRecent.games), "Últimos 5", renderFormChips(homeRecent.games))}
+            ${buildStatRow(renderFormChips(awayRecent.games), "Ãšltimos 5", renderFormChips(homeRecent.games))}
             ${buildStatRow(escapeHtml(getOpponentStrengthLabel(awayRecent.opponentPctAvg)), "Calidad rival", escapeHtml(getOpponentStrengthLabel(homeRecent.opponentPctAvg)))}
             ${buildStatRow(escapeHtml(`${awayAwayForm.record} | ${formatSignedOneDecimal(awayAwayForm.diffAvg || 0)}`), "Forma fuera/casa", escapeHtml(`${homeHomeForm.record} | ${formatSignedOneDecimal(homeHomeForm.diffAvg || 0)}`))}
             ${buildStatRow(escapeHtml(awayB2B.detail), "B2B", escapeHtml(homeB2B.detail))}
@@ -1794,7 +1794,7 @@ async function analyzeGame(gameId) {
     `;
   } catch (error) {
     console.error("Error analizando partido", error);
-    analysisPanel.innerHTML = "<p>No se pudo generar el análisis de este partido.</p>";
+    analysisPanel.innerHTML = "<p>No se pudo generar el anÃ¡lisis de este partido.</p>";
   }
 }
 
