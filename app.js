@@ -446,7 +446,6 @@ function buildStandingsLookup(standingsData) {
 
 function formatStatusText(status) {
   const lower = String(status || "").toLowerCase();
-
   if (lower.includes("final")) return "Finalizado";
   if (lower.includes("in progress")) return "En progreso";
   if (lower.includes("scheduled")) return "Programado";
@@ -513,7 +512,6 @@ function collectAllTeamStats(statsData) {
   ];
 
   raw.push(...directArrays);
-
   return raw.filter(Boolean);
 }
 
@@ -803,12 +801,17 @@ function buildOddsApiEventMatchScore(oddsEvent, homeName, awayName, commenceTime
   const targetAway = normalizeString(awayName);
 
   let score = 0;
-  if (oddsHome === targetHome) score += 5;
-  if (oddsAway === targetAway) score += 5;
+
+  if (oddsHome === targetHome) score += 6;
+  else if (oddsHome.includes(targetHome) || targetHome.includes(oddsHome)) score += 3;
+
+  if (oddsAway === targetAway) score += 6;
+  else if (oddsAway.includes(targetAway) || targetAway.includes(oddsAway)) score += 3;
 
   if (commenceTime && oddsEvent?.commence_time) {
     const diff = Math.abs(new Date(oddsEvent.commence_time).getTime() - new Date(commenceTime).getTime());
     if (diff <= 1000 * 60 * 180) score += 2;
+    else if (diff <= 1000 * 60 * 360) score += 1;
   }
 
   return score;
@@ -822,7 +825,7 @@ function findMatchingOddsEvent(oddsEvents, homeName, awayName, commenceTime = nu
       event,
       score: buildOddsApiEventMatchScore(event, homeName, awayName, commenceTime)
     }))
-    .filter(item => item.score >= 10)
+    .filter(item => item.score >= 7)
     .sort((a, b) => b.score - a.score);
 
   return scored[0]?.event || null;
@@ -913,6 +916,7 @@ function deriveInjurySeverity(statusText) {
   if (text.includes("question")) return 0.6;
   if (text.includes("game time")) return 0.5;
   if (text.includes("day to day")) return 0.35;
+  if (text.includes("probable")) return 0.15;
   return 0.2;
 }
 
@@ -982,65 +986,40 @@ async function fetchEspnInjuriesPage(teamAbbr = "") {
   return "";
 }
 
-function extractEspnTeamInjuries(html, teamName, teamAbbr) {
+function extractEspnTeamInjuries(html) {
   const text = String(html || "");
   if (!text) return [];
 
-  const normalizedTeamName = normalizeString(teamName);
-  const normalizedTeamAbbr = normalizeString(teamAbbr);
-
-  const cleaned = text
-    .replace(/\r/g, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "\n")
-    .replace(/<style[\s\S]*?<\/style>/gi, "\n")
-    .replace(/<[^>]+>/g, "\n")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-
-  const lines = cleaned.split("\n").map(line => line.trim()).filter(Boolean);
-
-  let startIndex = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const current = normalizeString(lines[i]);
-    if (
-      current === normalizedTeamName ||
-      current.includes(normalizedTeamName) ||
-      (normalizedTeamAbbr && current.includes(normalizedTeamAbbr))
-    ) {
-      startIndex = i;
-      break;
-    }
-  }
-
-  if (startIndex === -1) return [];
-
-  const block = lines.slice(startIndex, startIndex + 80);
   const rows = [];
+  const nameRegex = /"fullName":"([^"]+)"/g;
+  let match;
 
-  for (let i = 0; i < block.length; i++) {
-    const line = block[i];
-    const next1 = block[i + 1] || "";
-    const next2 = block[i + 2] || "";
-    const next3 = block[i + 3] || "";
+  while ((match = nameRegex.exec(text)) !== null) {
+    const start = match.index;
+    const chunk = text.slice(start, start + 500);
+    const player = match[1];
 
-    const nameLooksValid = /^[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+)+$/.test(line);
-    const posLooksValid = /^(PG|SG|SF|PF|C|G|F)$/i.test(next1);
-    const statusLooksValid = /(Out|Questionable|Doubtful|Probable|Day-To-Day|Game Time Decision|GTD)/i.test(next3);
+    const statusMatch =
+      chunk.match(/"status":"([^"]+)"/i) ||
+      chunk.match(/"comment":"([^"]+)"/i);
 
-    if (nameLooksValid && posLooksValid && statusLooksValid) {
-      rows.push({
-        player: line,
-        position: next1,
-        status: next3
-      });
-    }
+    const positionMatch =
+      chunk.match(/"position":"([^"]+)"/i) ||
+      chunk.match(/"displayPosition":"([^"]+)"/i);
+
+    rows.push({
+      player,
+      position: positionMatch?.[1] || "",
+      status: statusMatch?.[1] || "Pendiente"
+    });
   }
 
-  const unique = rows.filter((item, index, arr) =>
-    arr.findIndex(x => normalizeString(x.player) === normalizeString(item.player)) === index
-  );
-
-  return unique.slice(0, 8);
+  return rows
+    .filter(item => item.player && item.status)
+    .filter((item, index, arr) =>
+      arr.findIndex(x => normalizeString(x.player) === normalizeString(item.player)) === index
+    )
+    .slice(0, 8);
 }
 
 async function fetchRotowireLineupsHtml(dateMode = "today") {
@@ -1060,6 +1039,9 @@ async function fetchRotowireLineupsHtml(dateMode = "today") {
 
 function extractTeamLineupInfoFromHtml(html, teamName, teamAbbr) {
   const safeHtml = String(html || "");
+  const normalizedTeamName = normalizeString(teamName);
+  const normalizedTeamAbbr = normalizeString(teamAbbr);
+
   if (!safeHtml) {
     return {
       lineupConfirmed: false,
@@ -1069,33 +1051,23 @@ function extractTeamLineupInfoFromHtml(html, teamName, teamAbbr) {
     };
   }
 
-  const normalizedTeamName = normalizeString(teamName);
-  const normalizedTeamAbbr = normalizeString(teamAbbr);
-
-  const text = safeHtml
-    .replace(/\r/g, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "\n")
-    .replace(/<style[\s\S]*?<\/style>/gi, "\n")
+  const cleanText = safeHtml
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, "\n")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
+    .replace(/\n{2,}/g, "\n");
 
-  const lines = text.split("\n").map(line => line.trim()).filter(Boolean);
+  const lines = cleanText
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean);
 
-  let teamIndex = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const current = normalizeString(lines[i]);
-    if (
-      current === normalizedTeamName ||
-      current === normalizedTeamAbbr ||
-      current.includes(normalizedTeamName)
-    ) {
-      teamIndex = i;
-      break;
-    }
-  }
+  const joined = normalizeString(lines.join(" | "));
+  const foundTeam =
+    (normalizedTeamName && joined.includes(normalizedTeamName)) ||
+    (normalizedTeamAbbr && joined.includes(normalizedTeamAbbr));
 
-  if (teamIndex === -1) {
+  if (!foundTeam) {
     return {
       lineupConfirmed: false,
       lineupExpected: false,
@@ -1104,70 +1076,55 @@ function extractTeamLineupInfoFromHtml(html, teamName, teamAbbr) {
     };
   }
 
-  const windowLines = lines.slice(teamIndex, teamIndex + 90);
-  const normalizedWindow = normalizeString(windowLines.join(" | "));
+  const lineupConfirmed =
+    joined.includes(`${normalizedTeamName} confirmed lineup`) ||
+    joined.includes("confirmed lineup");
 
-  const lineupConfirmed = normalizedWindow.includes("confirmed lineup");
-  const lineupExpected = lineupConfirmed || normalizedWindow.includes("expected lineup");
+  const lineupExpected =
+    lineupConfirmed ||
+    joined.includes(`${normalizedTeamName} expected lineup`) ||
+    joined.includes("expected lineup");
 
   const starters = [];
   const injuries = [];
 
-  let inLineupBlock = false;
-  let inInjuryBlock = false;
+  for (let i = 0; i < lines.length - 1; i++) {
+    const pos = normalizeString(lines[i]);
+    const next = lines[i + 1] || "";
 
-  for (let i = 0; i < windowLines.length; i++) {
-    const line = windowLines[i];
-    const norm = normalizeString(line);
-
-    if (norm.includes("expected lineup") || norm.includes("confirmed lineup")) {
-      inLineupBlock = true;
-      inInjuryBlock = false;
-      continue;
-    }
-
-    if (norm.includes("may not play")) {
-      inLineupBlock = false;
-      inInjuryBlock = true;
-      continue;
-    }
-
-    if (inLineupBlock && ["pg", "sg", "sf", "pf", "c"].includes(norm)) {
-      const next = windowLines[i + 1] || "";
-      const nextNorm = normalizeString(next);
-      if (next && !["pg", "sg", "sf", "pf", "c"].includes(nextNorm)) {
+    if (["pg", "sg", "sf", "pf", "c"].includes(pos)) {
+      const player = next.trim();
+      if (/^[A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+)+$/.test(player)) {
         starters.push({
-          position: line.toUpperCase(),
-          player: next
-        });
-      }
-    }
-
-    if (inInjuryBlock) {
-      const match = line.match(/^([A-Z]{1,3})\s+(.+?)\s+(Out|Questionable|Doubtful|Probable|Game Time Decision|Day-To-Day|Ques|Doubt|Prob|GTD)$/i);
-      if (match) {
-        injuries.push({
-          position: match[1],
-          player: match[2],
-          status: match[3]
+          position: lines[i].toUpperCase(),
+          player
         });
       }
     }
   }
 
-  const uniqueStarters = starters.filter((item, index, arr) =>
-    arr.findIndex(x => normalizeString(`${x.position}-${x.player}`) === normalizeString(`${item.position}-${item.player}`)) === index
-  );
-
-  const uniqueInjuries = injuries.filter((item, index, arr) =>
-    arr.findIndex(x => normalizeString(x.player) === normalizeString(item.player)) === index
-  );
+  const injuryPattern = /([A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+)+)\s+(Out|Questionable|Doubtful|Probable|Game Time Decision|Day-To-Day|GTD)/g;
+  let injuryMatch;
+  while ((injuryMatch = injuryPattern.exec(cleanText)) !== null) {
+    injuries.push({
+      player: injuryMatch[1],
+      status: injuryMatch[2]
+    });
+  }
 
   return {
     lineupConfirmed,
     lineupExpected,
-    starters: uniqueStarters.slice(0, 5),
-    injuries: uniqueInjuries.slice(0, 8)
+    starters: starters
+      .filter((item, index, arr) =>
+        arr.findIndex(x => normalizeString(`${x.position}-${x.player}`) === normalizeString(`${item.position}-${item.player}`)) === index
+      )
+      .slice(0, 5),
+    injuries: injuries
+      .filter((item, index, arr) =>
+        arr.findIndex(x => normalizeString(x.player) === normalizeString(item.player)) === index
+      )
+      .slice(0, 8)
   };
 }
 
@@ -1178,14 +1135,17 @@ async function getTeamAvailability(teamName, teamAbbr) {
     fetchRotowireLineupsHtml("tomorrow")
   ]);
 
-  const espnInjuries = extractEspnTeamInjuries(espnHtml, teamName, teamAbbr);
+  const espnInjuries = extractEspnTeamInjuries(espnHtml);
   const rwToday = extractTeamLineupInfoFromHtml(rwTodayHtml, teamName, teamAbbr);
   const rwTomorrow = extractTeamLineupInfoFromHtml(rwTomorrowHtml, teamName, teamAbbr);
 
-  const lineupSource = rwToday.lineupExpected || rwToday.lineupConfirmed ? rwToday : rwTomorrow;
+  const lineupSource = rwToday.lineupExpected || rwToday.lineupConfirmed || rwToday.starters.length
+    ? rwToday
+    : rwTomorrow;
 
-  const mergedInjuries = [...espnInjuries];
-  for (const item of lineupSource.injuries || []) {
+  const mergedInjuries = [...(lineupSource.injuries || [])];
+
+  for (const item of espnInjuries) {
     const exists = mergedInjuries.some(existing => normalizeString(existing.player) === normalizeString(item.player));
     if (!exists) {
       mergedInjuries.push({
@@ -1209,60 +1169,43 @@ function renderAvailabilityInfo(summary) {
   return `${summary.display}`;
 }
 
-function renderInjuryList(summary, teamName) {
-  const starters = Array.isArray(summary?.starters) ? summary.starters : [];
-  const injuries = Array.isArray(summary?.injuries) ? summary.injuries : [];
+function renderTeamAvailabilityCard(teamName, availability) {
+  const starters = Array.isArray(availability?.starters) ? availability.starters : [];
+  const injuries = Array.isArray(availability?.injuries) ? availability.injuries : [];
 
   return `
-    <div class="availability-card">
-      <div class="availability-card-head">
-        <h5>${escapeHtml(teamName)}</h5>
-        <span class="availability-badge ${
-          summary?.lineupConfirmed
-            ? "is-confirmed"
-            : summary?.lineupExpected
-              ? "is-projected"
-              : "is-unknown"
-        }">
-          ${
-            summary?.lineupConfirmed
-              ? "Lineup confirmado"
-              : summary?.lineupExpected
-                ? "Lineup probable"
-                : "Sin confirmar"
-          }
-        </span>
-      </div>
+    <div class="availability-card-lite" style="margin-top:10px; padding:12px; border:1px solid rgba(255,255,255,.08); border-radius:12px; background:rgba(255,255,255,.02);">
+      <p style="margin:0 0 8px 0;"><strong>${escapeHtml(teamName)}</strong></p>
+      <p style="margin:0 0 8px 0; opacity:.9;">
+        Estado lineup:
+        <strong>${
+          availability?.lineupConfirmed
+            ? "Confirmado"
+            : availability?.lineupExpected
+              ? "Probable"
+              : "Sin confirmar"
+        }</strong>
+      </p>
 
-      <div class="availability-section">
-        <div class="availability-label">Quinteto esperado</div>
+      <div style="margin-top:8px;">
+        <p style="margin:0 0 6px 0;"><strong>Quinteto esperado</strong></p>
         ${
           starters.length
-            ? `<div class="starter-list">
-                ${starters.map(item => `
-                  <div class="starter-item">
-                    <span class="starter-pos">${escapeHtml(item.position || "-")}</span>
-                    <span class="starter-player">${escapeHtml(item.player || "Pendiente")}</span>
-                  </div>
-                `).join("")}
-              </div>`
-            : `<p class="availability-empty">No se detectó un quinteto probable para este equipo.</p>`
+            ? starters.map(item => `
+                <p style="margin:0 0 4px 0; opacity:.92;">${escapeHtml(item.position)} · ${escapeHtml(item.player)}</p>
+              `).join("")
+            : `<p style="margin:0; opacity:.75;">No detectado.</p>`
         }
       </div>
 
-      <div class="availability-section">
-        <div class="availability-label">Bajas / dudas</div>
+      <div style="margin-top:10px;">
+        <p style="margin:0 0 6px 0;"><strong>Bajas / dudas</strong></p>
         ${
           injuries.length
-            ? `<div class="injury-list">
-                ${injuries.slice(0, 6).map(item => `
-                  <div class="injury-item">
-                    <span class="injury-player">${escapeHtml(item.player || "Jugador")}</span>
-                    <span class="injury-status">${escapeHtml(item.status || "Pendiente")}</span>
-                  </div>
-                `).join("")}
-              </div>`
-            : `<p class="availability-empty">Sin bajas relevantes detectadas.</p>`
+            ? injuries.slice(0, 6).map(item => `
+                <p style="margin:0 0 4px 0; opacity:.92;">${escapeHtml(item.player)}: ${escapeHtml(item.status || "Pendiente")}</p>
+              `).join("")
+            : `<p style="margin:0; opacity:.75;">Sin bajas relevantes detectadas.</p>`
         }
       </div>
     </div>
@@ -1280,458 +1223,34 @@ function renderBetRecommendationBlock(
   homeAvailability = null,
   homeName = ""
 ) {
-  const selection = recommendation?.selection || null;
-  const strengthLevel = recommendation?.strength?.level || "No bet";
-  const strengthClass =
-    strengthLevel === "Fuerte"
-      ? "is-strong"
-      : strengthLevel === "Medio"
-        ? "is-medium"
-        : strengthLevel === "Leve"
-          ? "is-light"
-          : "is-nobet";
-
-  const recommendationHtml = selection
-    ? `
-      <div class="summary-pick-card">
-        <div class="summary-pick-top">
-          <div>
-            <div class="summary-label">Pick recomendado</div>
-            <div class="summary-pick-main">${escapeHtml(selection.label)}</div>
-          </div>
-          <span class="strength-pill ${strengthClass}">${escapeHtml(strengthLevel)}</span>
-        </div>
-
-        <div class="summary-pick-grid">
-          <div class="summary-mini-stat">
-            <span class="summary-mini-label">Mercado</span>
-            <strong>${escapeHtml(selection.marketLabel || selection.type.toUpperCase())}</strong>
-          </div>
-          <div class="summary-mini-stat">
-            <span class="summary-mini-label">Casa</span>
-            <strong>${escapeHtml(getBookmakerDisplayName(selection.bookmakerKey, selection.bookmakerTitle))}</strong>
-          </div>
-          <div class="summary-mini-stat">
-            <span class="summary-mini-label">Cuota</span>
-            <strong>${escapeHtml(formatOddsDecimal(selection.odds))}</strong>
-          </div>
-          <div class="summary-mini-stat">
-            <span class="summary-mini-label">Stake</span>
-            <strong>${escapeHtml(recommendation?.strength?.stake || "0%")}</strong>
-          </div>
-        </div>
-
-        <p class="summary-reason">${escapeHtml(recommendation.reason || "")}</p>
-
-        ${
-          selection.isEstimated
-            ? `<p class="summary-footnote">Línea estimada desde mercado principal: ${escapeHtml(selection.derivedFromLabel || "Sí")}.</p>`
-            : ""
-        }
-      </div>
-    `
-    : `
-      <div class="summary-pick-card is-empty">
-        <div class="summary-pick-top">
-          <div>
-            <div class="summary-label">Pick recomendado</div>
-            <div class="summary-pick-main">No bet</div>
-          </div>
-          <span class="strength-pill is-nobet">Sin valor</span>
-        </div>
-        <p class="summary-reason">${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadística.")}</p>
-      </div>
-    `;
-
   return `
-    <div class="pregame-summary">
-      <style>
-        .pregame-summary {
-          margin: 0 0 16px;
-          display: grid;
-          gap: 14px;
-        }
+    <div class="betting-notes">
+      <h4>${escapeHtml(edgeText)}</h4>
+      <p>${escapeHtml(autoNote)}</p>
+      <p style="margin-top:10px;"><strong>${escapeHtml(leanText)}</strong></p>
+      ${availabilityNote ? `<p style="margin-top:10px;">${escapeHtml(availabilityNote)}</p>` : ""}
 
-        .summary-hero {
-          background: linear-gradient(180deg, rgba(21,28,38,.98) 0%, rgba(14,20,28,.98) 100%);
-          border: 1px solid rgba(88, 166, 255, 0.14);
-          border-radius: 18px;
-          padding: 16px;
-          box-shadow: 0 14px 34px rgba(0,0,0,.24);
-        }
+      ${
+        recommendation?.selection
+          ? `
+            <hr style="margin:12px 0; opacity:.15;">
+            <p><strong>Pick recomendado:</strong> ${escapeHtml(recommendation.selection.label)}</p>
+            <p>Mercado: ${escapeHtml(recommendation.selection.marketLabel || recommendation.selection.type.toUpperCase())} · Casa: ${escapeHtml(getBookmakerDisplayName(recommendation.selection.bookmakerKey, recommendation.selection.bookmakerTitle))}</p>
+            <p>Cuota: <strong>${escapeHtml(formatOddsDecimal(recommendation.selection.odds))}</strong> · Prob. implícita: ${escapeHtml(formatPercent(recommendation.selection.impliedProbability))}</p>
+            ${recommendation.selection.isEstimated ? `<p>Línea estimada basada en mercado principal: ${escapeHtml(recommendation.selection.derivedFromLabel || "Sí")}</p>` : ""}
+            <p>Fuerza: ${escapeHtml(recommendation.strength.level)} · Stake: ${escapeHtml(recommendation.strength.stake)}</p>
+            <p style="margin-top:10px;">${escapeHtml(recommendation.reason || "")}</p>
+          `
+          : `
+            <hr style="margin:12px 0; opacity:.15;">
+            <p><strong>Pick recomendado:</strong> No bet</p>
+            <p>${escapeHtml(recommendation?.reason || "No hay una cuota jugable alineada con la lectura estadística.")}</p>
+          `
+      }
 
-        .summary-hero-top {
-          display: flex;
-          justify-content: space-between;
-          gap: 12px;
-          align-items: flex-start;
-          flex-wrap: wrap;
-          margin-bottom: 12px;
-        }
-
-        .summary-title {
-          display: grid;
-          gap: 6px;
-        }
-
-        .summary-title .summary-kicker {
-          font-size: 11px;
-          letter-spacing: .08em;
-          text-transform: uppercase;
-          color: rgba(143, 211, 255, .82);
-        }
-
-        .summary-title h4 {
-          margin: 0;
-          font-size: 20px;
-          line-height: 1.15;
-          color: #f3f7fb;
-        }
-
-        .summary-title p {
-          margin: 0;
-          color: rgba(214, 226, 238, .82);
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        .lean-pill {
-          display: inline-flex;
-          align-items: center;
-          padding: 8px 12px;
-          border-radius: 999px;
-          background: rgba(55, 179, 126, .14);
-          border: 1px solid rgba(55, 179, 126, .28);
-          color: #b9f5d6;
-          font-weight: 700;
-          font-size: 12px;
-          white-space: nowrap;
-        }
-
-        .summary-note {
-          margin: 0;
-          color: rgba(223, 231, 240, .9);
-          font-size: 14px;
-          line-height: 1.6;
-        }
-
-        .summary-pick-card {
-          background: rgba(15, 23, 33, .92);
-          border: 1px solid rgba(109, 168, 255, .18);
-          border-radius: 16px;
-          padding: 14px;
-        }
-
-        .summary-pick-card.is-empty {
-          border-color: rgba(255, 184, 77, .18);
-          background: rgba(28, 24, 16, .88);
-        }
-
-        .summary-pick-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 12px;
-          margin-bottom: 12px;
-        }
-
-        .summary-label {
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: .08em;
-          color: rgba(154, 176, 198, .78);
-          margin-bottom: 4px;
-        }
-
-        .summary-pick-main {
-          font-size: 20px;
-          line-height: 1.2;
-          color: #ffffff;
-          font-weight: 800;
-        }
-
-        .strength-pill {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-width: 78px;
-          padding: 7px 10px;
-          border-radius: 999px;
-          font-size: 12px;
-          font-weight: 800;
-          border: 1px solid transparent;
-        }
-
-        .strength-pill.is-strong {
-          background: rgba(52, 211, 153, .15);
-          color: #9af0ca;
-          border-color: rgba(52, 211, 153, .3);
-        }
-
-        .strength-pill.is-medium {
-          background: rgba(96, 165, 250, .15);
-          color: #b4d6ff;
-          border-color: rgba(96, 165, 250, .3);
-        }
-
-        .strength-pill.is-light {
-          background: rgba(250, 204, 21, .14);
-          color: #ffe59a;
-          border-color: rgba(250, 204, 21, .28);
-        }
-
-        .strength-pill.is-nobet {
-          background: rgba(148, 163, 184, .14);
-          color: #d0dae6;
-          border-color: rgba(148, 163, 184, .24);
-        }
-
-        .summary-pick-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-          margin-bottom: 12px;
-        }
-
-        .summary-mini-stat {
-          background: rgba(255,255,255,.03);
-          border: 1px solid rgba(255,255,255,.05);
-          border-radius: 12px;
-          padding: 10px 11px;
-          display: grid;
-          gap: 4px;
-        }
-
-        .summary-mini-label {
-          font-size: 11px;
-          color: rgba(162, 176, 191, .78);
-          text-transform: uppercase;
-          letter-spacing: .07em;
-        }
-
-        .summary-mini-stat strong {
-          font-size: 14px;
-          color: #f5f9ff;
-        }
-
-        .summary-reason,
-        .summary-footnote {
-          margin: 0;
-          line-height: 1.6;
-        }
-
-        .summary-reason {
-          color: rgba(226, 233, 241, .92);
-          font-size: 14px;
-        }
-
-        .summary-footnote {
-          margin-top: 8px;
-          color: rgba(167, 183, 201, .78);
-          font-size: 12px;
-        }
-
-        .availability-overview {
-          background: rgba(12, 18, 27, .92);
-          border: 1px solid rgba(85, 125, 177, .18);
-          border-radius: 16px;
-          padding: 14px;
-        }
-
-        .availability-overview-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-          margin-bottom: 12px;
-        }
-
-        .availability-overview-head h5 {
-          margin: 0;
-          color: #eef5fc;
-          font-size: 15px;
-        }
-
-        .availability-overview-head p {
-          margin: 0;
-          color: rgba(167, 183, 201, .82);
-          font-size: 12px;
-        }
-
-        .availability-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-        }
-
-        .availability-card {
-          background: rgba(255,255,255,.03);
-          border: 1px solid rgba(255,255,255,.06);
-          border-radius: 14px;
-          padding: 12px;
-          display: grid;
-          gap: 12px;
-        }
-
-        .availability-card-head {
-          display: flex;
-          justify-content: space-between;
-          gap: 10px;
-          align-items: flex-start;
-          flex-wrap: wrap;
-        }
-
-        .availability-card-head h5 {
-          margin: 0;
-          color: #f4f8fc;
-          font-size: 15px;
-        }
-
-        .availability-badge {
-          display: inline-flex;
-          align-items: center;
-          padding: 6px 10px;
-          border-radius: 999px;
-          font-size: 11px;
-          font-weight: 700;
-          border: 1px solid transparent;
-        }
-
-        .availability-badge.is-confirmed {
-          background: rgba(52, 211, 153, .14);
-          color: #9af0ca;
-          border-color: rgba(52, 211, 153, .28);
-        }
-
-        .availability-badge.is-projected {
-          background: rgba(96, 165, 250, .14);
-          color: #b8d7ff;
-          border-color: rgba(96, 165, 250, .28);
-        }
-
-        .availability-badge.is-unknown {
-          background: rgba(148, 163, 184, .14);
-          color: #d5dee8;
-          border-color: rgba(148, 163, 184, .22);
-        }
-
-        .availability-section {
-          display: grid;
-          gap: 8px;
-        }
-
-        .availability-label {
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: .08em;
-          color: rgba(158, 177, 196, .76);
-        }
-
-        .starter-list,
-        .injury-list {
-          display: grid;
-          gap: 8px;
-        }
-
-        .starter-item,
-        .injury-item {
-          display: flex;
-          justify-content: space-between;
-          gap: 10px;
-          align-items: center;
-          padding: 9px 10px;
-          border-radius: 10px;
-          background: rgba(255,255,255,.035);
-          border: 1px solid rgba(255,255,255,.04);
-        }
-
-        .starter-pos {
-          min-width: 34px;
-          text-align: center;
-          font-size: 11px;
-          font-weight: 800;
-          color: #9bd0ff;
-          background: rgba(86, 156, 214, .12);
-          border: 1px solid rgba(86, 156, 214, .22);
-          border-radius: 999px;
-          padding: 5px 7px;
-        }
-
-        .starter-player,
-        .injury-player {
-          flex: 1;
-          color: #eff5fb;
-          font-size: 13px;
-        }
-
-        .injury-status {
-          font-size: 11px;
-          font-weight: 700;
-          color: #ffd89a;
-          background: rgba(245, 158, 11, .12);
-          border: 1px solid rgba(245, 158, 11, .24);
-          border-radius: 999px;
-          padding: 5px 8px;
-          white-space: nowrap;
-        }
-
-        .availability-empty {
-          margin: 0;
-          color: rgba(164, 181, 198, .78);
-          font-size: 13px;
-          line-height: 1.5;
-        }
-
-        @media (max-width: 760px) {
-          .summary-pick-grid,
-          .availability-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .summary-pick-top,
-          .summary-hero-top,
-          .availability-card-head {
-            flex-direction: column;
-            align-items: flex-start;
-          }
-
-          .starter-item,
-          .injury-item {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-        }
-      </style>
-
-      <div class="summary-hero">
-        <div class="summary-hero-top">
-          <div class="summary-title">
-            <span class="summary-kicker">Resumen del matchup</span>
-            <h4>${escapeHtml(edgeText)}</h4>
-            <p>${escapeHtml(leanText)}</p>
-          </div>
-          <span class="lean-pill">${escapeHtml(recommendation?.selection ? "Pick activo" : "Lectura prudente")}</span>
-        </div>
-
-        <p class="summary-note">${escapeHtml(autoNote)}</p>
-        ${availabilityNote ? `<p class="summary-footnote">${escapeHtml(availabilityNote)}</p>` : ""}
-      </div>
-
-      ${recommendationHtml}
-
-      <div class="availability-overview">
-        <div class="availability-overview-head">
-          <div>
-            <h5>Lineups y disponibilidad</h5>
-            <p>Quintetos probables, confirmación y bajas detectadas.</p>
-          </div>
-        </div>
-
-        <div class="availability-grid">
-          ${renderInjuryList(awayAvailability, awayName)}
-          ${renderInjuryList(homeAvailability, homeName)}
-        </div>
+      <div style="margin-top:14px;">
+        ${renderTeamAvailabilityCard(awayName, awayAvailability)}
+        ${renderTeamAvailabilityCard(homeName, homeAvailability)}
       </div>
     </div>
   `;
@@ -1748,16 +1267,16 @@ function selectSideRecommendation(bookmakers, preferredSideName, modelMarginAbs 
     const spreadPrice = Number(spreadOutcome?.price);
     const spreadPoint = Number(spreadOutcome?.point);
 
-    const hasSpread = spreadOutcome && !Number.isNaN(spreadPrice) && spreadPrice >= 1.5 && !Number.isNaN(spreadPoint);
+    const hasSpread = spreadOutcome && !Number.isNaN(spreadPrice) && spreadPrice >= 1.2 && !Number.isNaN(spreadPoint);
     const spreadAbs = Math.abs(spreadPoint);
     const modelAbs = Number(modelMarginAbs);
 
     if (hasSpread && modelAbs !== null && !Number.isNaN(modelAbs)) {
       const spreadIsPlayable =
         spreadPoint > 0 ||
-        spreadAbs <= Math.max(3.5, modelAbs - 1.5);
+        spreadAbs <= Math.max(5.5, modelAbs - 1);
 
-      if (spreadIsPlayable && modelAbs >= 4) {
+      if (spreadIsPlayable && modelAbs >= 3) {
         return {
           type: "spread",
           marketLabel: "SPREAD",
@@ -1775,7 +1294,7 @@ function selectSideRecommendation(bookmakers, preferredSideName, modelMarginAbs 
       const altPoint = getSuggestedAlternateSpread(spreadPoint, modelAbs);
       const altOdds = altPoint !== null ? estimateAdjustedOdds(spreadPoint, spreadPrice, altPoint, 0.022) : null;
 
-      if (altPoint !== null && altOdds !== null && altOdds >= 1.2 && modelAbs >= 4) {
+      if (altPoint !== null && altOdds !== null && altOdds >= 1.15 && modelAbs >= 3) {
         return {
           type: "alternate_spread_estimated",
           marketLabel: "SPREAD ALTERNATIVO ESTIMADO",
@@ -1795,7 +1314,7 @@ function selectSideRecommendation(bookmakers, preferredSideName, modelMarginAbs 
     const mlOutcome = findOutcomeByTeamName(h2h?.outcomes || [], preferredSideName);
     const mlPrice = Number(mlOutcome?.price);
 
-    if (mlOutcome && !Number.isNaN(mlPrice) && mlPrice >= 1.5) {
+    if (mlOutcome && !Number.isNaN(mlPrice) && mlPrice >= 1.2) {
       return {
         type: "moneyline",
         marketLabel: "MONEYLINE",
@@ -1843,81 +1362,37 @@ function selectTotalRecommendation(bookmakers, projectedTotal) {
     const overPrice = Number(over?.price);
     const underPrice = Number(under?.price);
 
-    if (!Number.isNaN(overPoint) && !Number.isNaN(overPrice) && overPrice >= 1.5) {
-      if (projectedTotal >= overPoint + 6) {
-        const lineTooHigh = projectedTotal >= overPoint + 12 || overPoint >= 235;
-        if (!lineTooHigh) {
-          return {
-            type: "total",
-            marketLabel: "TOTAL",
-            bookmakerKey: bookmaker.key,
-            bookmakerTitle: bookmaker.title,
-            side: "Over",
-            line: overPoint,
-            label: `Más de ${overPoint}`,
-            odds: overPrice,
-            impliedProbability: impliedProbabilityFromDecimal(overPrice),
-            isEstimated: false
-          };
-        }
-
-        const altPoint = getSuggestedAlternateTotal(overPoint, projectedTotal, "over");
-        const altOdds = altPoint !== null ? estimateAdjustedOdds(overPoint, overPrice, altPoint, 0.018) : null;
-
-        if (altPoint !== null && altOdds !== null) {
-          return {
-            type: "alternate_total_estimated",
-            marketLabel: "TOTAL ALTERNATIVO ESTIMADO",
-            bookmakerKey: bookmaker.key,
-            bookmakerTitle: bookmaker.title,
-            side: "Over",
-            line: altPoint,
-            label: `Más de ${altPoint}`,
-            odds: altOdds,
-            impliedProbability: impliedProbabilityFromDecimal(altOdds),
-            isEstimated: true,
-            derivedFromLabel: `Más de ${overPoint} @ ${formatOddsDecimal(overPrice)}`
-          };
-        }
+    if (!Number.isNaN(overPoint) && !Number.isNaN(overPrice) && overPrice >= 1.2) {
+      if (projectedTotal >= overPoint + 5) {
+        return {
+          type: "total",
+          marketLabel: "TOTAL",
+          bookmakerKey: bookmaker.key,
+          bookmakerTitle: bookmaker.title,
+          side: "Over",
+          line: overPoint,
+          label: `Más de ${overPoint}`,
+          odds: overPrice,
+          impliedProbability: impliedProbabilityFromDecimal(overPrice),
+          isEstimated: false
+        };
       }
     }
 
-    if (!Number.isNaN(underPoint) && !Number.isNaN(underPrice) && underPrice >= 1.5) {
-      if (projectedTotal <= underPoint - 6) {
-        const lineTooLow = projectedTotal <= underPoint - 12 || underPoint <= 210;
-        if (!lineTooLow) {
-          return {
-            type: "total",
-            marketLabel: "TOTAL",
-            bookmakerKey: bookmaker.key,
-            bookmakerTitle: bookmaker.title,
-            side: "Under",
-            line: underPoint,
-            label: `Menos de ${underPoint}`,
-            odds: underPrice,
-            impliedProbability: impliedProbabilityFromDecimal(underPrice),
-            isEstimated: false
-          };
-        }
-
-        const altPoint = getSuggestedAlternateTotal(underPoint, projectedTotal, "under");
-        const altOdds = altPoint !== null ? estimateAdjustedOdds(underPoint, underPrice, altPoint, 0.018) : null;
-
-        if (altPoint !== null && altOdds !== null) {
-          return {
-            type: "alternate_total_estimated",
-            marketLabel: "TOTAL ALTERNATIVO ESTIMADO",
-            bookmakerKey: bookmaker.key,
-            bookmakerTitle: bookmaker.title,
-            side: "Under",
-            line: altPoint,
-            label: `Menos de ${altPoint}`,
-            odds: altOdds,
-            impliedProbability: impliedProbabilityFromDecimal(altOdds),
-            isEstimated: true,
-            derivedFromLabel: `Menos de ${underPoint} @ ${formatOddsDecimal(underPrice)}`
-          };
-        }
+    if (!Number.isNaN(underPoint) && !Number.isNaN(underPrice) && underPrice >= 1.2) {
+      if (projectedTotal <= underPoint - 5) {
+        return {
+          type: "total",
+          marketLabel: "TOTAL",
+          bookmakerKey: bookmaker.key,
+          bookmakerTitle: bookmaker.title,
+          side: "Under",
+          line: underPoint,
+          label: `Menos de ${underPoint}`,
+          odds: underPrice,
+          impliedProbability: impliedProbabilityFromDecimal(underPrice),
+          isEstimated: false
+        };
       }
     }
   }
@@ -1945,46 +1420,26 @@ function buildOddsRecommendation({
   const edgeGap = Math.abs(adjustedAwayEdge - adjustedHomeEdge);
   const contextPenalty = Math.max(awayAvailabilityPenalty, homeAvailabilityPenalty) >= 1.5 ? 1 : 0;
 
-  if (adjustedAwayEdge >= adjustedHomeEdge + 2) {
+  if (adjustedAwayEdge >= adjustedHomeEdge + 1.5) {
     const selection = selectSideRecommendation(oddsEvent.bookmakers, awayName, Math.abs(projectedSpread));
-    if (!selection) {
-      const totalFallback = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
-      if (!totalFallback) {
-        return makeNoBet(`La lectura favorece a ${awayName}, pero no apareció una ML, spread o total jugable.`);
-      }
+    if (selection) {
       return {
-        selection: totalFallback,
-        strength: classifyBetStrength(2, totalFallback.odds, contextPenalty),
-        reason: `El lado favorece a ${awayName}, pero el mejor encaje de mercado termina estando en el total.`
+        selection,
+        strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
+        reason: `${awayName} es el lado que mejor respalda la lectura estadística del matchup.`
       };
     }
-
-    return {
-      selection,
-      strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
-      reason: `${awayName} es el lado que mejor respalda la lectura estadística del matchup.`
-    };
   }
 
-  if (adjustedHomeEdge >= adjustedAwayEdge + 2) {
+  if (adjustedHomeEdge >= adjustedAwayEdge + 1.5) {
     const selection = selectSideRecommendation(oddsEvent.bookmakers, homeName, Math.abs(projectedSpread));
-    if (!selection) {
-      const totalFallback = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
-      if (!totalFallback) {
-        return makeNoBet(`La lectura favorece a ${homeName}, pero no apareció una ML, spread o total jugable.`);
-      }
+    if (selection) {
       return {
-        selection: totalFallback,
-        strength: classifyBetStrength(2, totalFallback.odds, contextPenalty),
-        reason: `El lado favorece a ${homeName}, pero el mejor encaje de mercado termina estando en el total.`
+        selection,
+        strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
+        reason: `${homeName} es el lado que mejor respalda la lectura estadística del matchup.`
       };
     }
-
-    return {
-      selection,
-      strength: classifyBetStrength(edgeGap, selection.odds, contextPenalty),
-      reason: `${homeName} es el lado que mejor respalda la lectura estadística del matchup.`
-    };
   }
 
   const totalSelection = selectTotalRecommendation(oddsEvent.bookmakers, projectedTotal);
@@ -1993,6 +1448,19 @@ function buildOddsRecommendation({
       selection: totalSelection,
       strength: classifyBetStrength(2, totalSelection.odds, contextPenalty),
       reason: "Como el lado está equilibrado, el mejor ángulo del matchup aparece en el total."
+    };
+  }
+
+  const fallbackMoneyline =
+    adjustedAwayEdge > adjustedHomeEdge
+      ? selectSideRecommendation(oddsEvent.bookmakers, awayName, 0)
+      : selectSideRecommendation(oddsEvent.bookmakers, homeName, 0);
+
+  if (fallbackMoneyline) {
+    return {
+      selection: fallbackMoneyline,
+      strength: classifyBetStrength(1.5, fallbackMoneyline.odds, contextPenalty),
+      reason: "No hubo spread/total claro, pero sí una opción utilizable para seguir el lean principal."
     };
   }
 
@@ -2372,7 +1840,7 @@ async function analyzeGame(gameId) {
       autoNote += " La disponibilidad de jugadores ajusta la confianza del pick.";
     }
 
-    const availabilityNote = `Disponibilidad: ${awayName} (${awayStats.availability}) vs ${homeName} (${homeStats.availability}).`;
+    const availabilityNote = `${awayName}: ${awayStats.availability} · ${homeName}: ${homeStats.availability}`;
 
     const recordCompare = compareNumbersHigherBetter(awayRecordParsed?.pct ?? null, homeRecordParsed?.pct ?? null);
     const recentScoredCompare = compareNumbersHigherBetter(awayRecentScoredNum, homeRecentScoredNum);
