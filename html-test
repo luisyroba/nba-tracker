@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NBA Betting Dashboard</title>
+  <link rel="stylesheet" href="style.css?v=50" />
+</head>
+<body>
+  <header>
+    <h1>NBA Betting Dashboard</h1>
+    <p>Listado de partidos NBA</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Estado</h2>
+      <p id="status">Cargando partidos...</p>
+    </section>
+
+    <section class="card">
+      <h2>Partidos NBA</h2>
+      <div id="games" class="games-grid"></div>
+    </section>
+  </main>
+
+  <div id="game-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" id="modal-close-bg"></div>
+
+    <section
+      class="modal-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      <div class="modal-header">
+        <h2 id="modal-title">Análisis del partido</h2>
+        <button id="modal-close" class="close-btn" type="button" aria-label="Cerrar análisis">✕</button>
+      </div>
+
+      <div id="analysis-panel">
+        <p>Haz clic en “Analizar partido” para ver detalles.</p>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js?v=76" defer></script>
+</body>
+</html>
